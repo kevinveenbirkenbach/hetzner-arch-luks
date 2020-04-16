@@ -1,4 +1,4 @@
-# Arch Linux with LUKS and btrfs on a hetzner server
+# Arch Linux with LUKS and btrfs on a hetzner server (DRAFT)
 This guide should show you how to set up an System with the following specifications on an hetzner server:
 * Arch Linux
 * btrfs
@@ -63,22 +63,18 @@ reboot
 
 ### 2. Setup System
 #### 2.1
-Revoke old SSH key:
-```bash
-ssh-keygen -f "$HOME/.ssh/known_hosts" -R your_server_ip
-```
-#### 2.2
 Login to your server:
+
 ```bash
+ssh-keygen -f "$HOME/.ssh/known_hosts" -R your_server_ip #revokes old ssh_host
 ssh root@your_server_ip
 ```
-
-#### 2.3
+#### 2.2
 Update the system:
 ```bash
 pacman -Syyu
 ```
-#### 2.4
+#### 2.3
 Install basic administration software:
 ```bash
 pacman -Syyu nano
@@ -92,11 +88,132 @@ pacman -Syyu busybox mkinitcpio-dropbear mkinitcpio-utils
 #Copy ssh-key
 cp ~/.ssh/authorized_keys /etc/dropbear/root_key
 ```
+#### 3.2
+Replace the following line in **/etc/mkinitcpio.conf**
+```
+HOOKS=(base udev autodetect modconf block mdadm_udev lvm2 filesystems keyboard fsck)
+```
+with
+```
+HOOKS=(netconf ppp dropbear encryptssh base udev autodetect modconf block mdadm_udev lvm2 filesystems keyboard fsck)
+```
+
+### 4. Activate Encryption
+#### 4.1
+Activate the rescue system https://robot.your-server.de/server
+#### 4.2
+Afterwards reboot the system by entering:
+
+```bash
+reboot
+```
+#### 4.3
+Login to the rescue system:
+```bash
+ssh-keygen -f "$HOME/.ssh/known_hosts" -R your_server_ip #revokes old ssh_host
+ssh root@your_server_ip
+```
+
+#### 4.4
+Mount the "system" by:
+```bash
+vgscan -v
+vgchange -a y
+mount /dev/mapper/vg0-root /mnt
+```
+#### 4.5
+Copy "system":
+```bash
+# Resync unterbrechen
+echo 0 >/proc/sys/dev/raid/speed_limit_max
+mkdir /oldroot
+cp -a /mnt/. /oldroot/.
+# Resync fortsetzen
+echo 200000 >/proc/sys/dev/raid/speed_limit_max
+```
+#### 4.6
+Unmount the "system" by:
+```bash
+umount /mnt
+```
+
+#### 4.7
+Delete unencrypted LVM-Volume-Group by executing:
+```bash
+umount /mnt
+```
+
+#### 4.8
+```bash
+cat /proc/mdstat
+```
+#### 4.9
+Encrypt MD1 by executing:
+```bash
+cryptsetup --cipher aes-xts-plain64 --key-size 256 --hash sha256 --iter-time=10000 luksFormat /dev/md1
+ryptsetup luksOpen /dev/md1 cryptroot
+pvcreate /dev/mapper/cryptroot
+vgcreate vg0 /dev/mapper/cryptroot
+lvcreate -n swap -L8G vg0
+lvcreate -n root -L10G vg0
+mkfs.btrfs /dev/vg0/root
+mkswap /dev/vg0/swap
+```
+
+#### 4.10
+Mount encrypted :
+```bash
+mount /dev/vg0/root /mnt
+```
+
+#### 4.11
+Mount encrypted :
+```bash
+mount /dev/vg0/root /mnt
+```
+
+#### 4.12
+Copy "system":
+```bash
+# Resync unterbrechen
+echo 0 >/proc/sys/dev/raid/speed_limit_max
+cp -a /oldroot/. /mnt/.
+# Resync fortsetzen
+echo 200000 >/proc/sys/dev/raid/speed_limit_max
+```
+
+#### 4.13
+Integrate finale installation:
+```bash
+mount /dev/md0 /mnt/boot
+mount --bind /dev /mnt/dev
+mount --bind /sys /mnt/sys
+mount --bind /proc /mnt/proc
+chroot /mnt
+```
+
+#### 4.14
+```bash
+echo "cryptroot /dev/md1 none luks" >> /etc/crypttab
+```
+Missing **initramfs neu schreiben** **GRUB neu schreiben**
+
+#### 4.15
+```bash
+exit
+umount /mnt/boot /mnt/proc /mnt/sys /mnt/dev
+umount /mnt
+sync
+
+#Neustart
+reboot
 
 
+```
 
 ## Sources
 The code is adapted from the following guides:
 
 * http://daemons-point.com/blog/2019/10/20/hetzner-verschluesselt/
 * https://www.howtoforge.com/using-the-btrfs-filesystem-with-raid1-with-ubuntu-12.10-on-a-hetzner-server
+* https://wiki.archlinux.org/index.php/Dm-crypt/Specialties#Remote_unlocking_(hooks:_netconf,_dropbear,_tinyssh,_ppp)
