@@ -140,7 +140,7 @@ umount /mnt
 #### 4.7
 Delete unencrypted LVM-Volume-Group by executing:
 ```bash
-umount /mnt
+vgremove vg0
 ```
 
 #### 4.8
@@ -161,12 +161,6 @@ mkswap /dev/vg0/swap
 ```
 
 #### 4.10
-Mount encrypted :
-```bash
-mount /dev/vg0/root /mnt
-```
-
-#### 4.11
 Mount encrypted :
 ```bash
 mount /dev/vg0/root /mnt
