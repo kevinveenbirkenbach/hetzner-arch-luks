@@ -84,9 +84,9 @@ pacman -Syyu nano
 #### 3.1 Execute the following script
 ```bash
 # Install software
-pacman -Syyu busybox mkinitcpio-dropbear mkinitcpio-utils
+pacman -Syyu busybox mkinitcpio-dropbear mkinitcpio-utils mkinitcpio-netconf
 #Copy ssh-key
-cp ~/.ssh/authorized_keys /etc/dropbear/root_key
+cp -v ~/.ssh/authorized_keys /etc/dropbear/root_key
 ```
 #### 3.2
 Replace the following line in **/etc/mkinitcpio.conf**
@@ -95,7 +95,7 @@ HOOKS=(base udev autodetect modconf block mdadm_udev lvm2 filesystems keyboard f
 ```
 with
 ```
-HOOKS=(netconf ppp dropbear encryptssh base udev autodetect modconf block mdadm_udev lvm2 filesystems keyboard fsck)
+HOOKS=(netconf dropbear encryptssh base udev autodetect modconf block mdadm_udev lvm2 filesystems keyboard fsck)
 ```
 
 ### 4. Activate Encryption
@@ -127,7 +127,7 @@ Copy "system":
 # Resync unterbrechen
 echo 0 >/proc/sys/dev/raid/speed_limit_max
 mkdir /oldroot
-cp -a /mnt/. /oldroot/.
+cp -va /mnt/. /oldroot/.
 # Resync fortsetzen
 echo 200000 >/proc/sys/dev/raid/speed_limit_max
 ```
@@ -144,6 +144,7 @@ vgremove vg0
 ```
 
 #### 4.8
+Check drive state:
 ```bash
 cat /proc/mdstat
 ```
@@ -151,7 +152,7 @@ cat /proc/mdstat
 Encrypt MD1 by executing:
 ```bash
 cryptsetup --cipher aes-xts-plain64 --key-size 256 --hash sha256 --iter-time=10000 luksFormat /dev/md1
-ryptsetup luksOpen /dev/md1 cryptroot
+cryptsetup luksOpen /dev/md1 cryptroot
 pvcreate /dev/mapper/cryptroot
 vgcreate vg0 /dev/mapper/cryptroot
 lvcreate -n swap -L8G vg0
@@ -171,7 +172,7 @@ Copy "system":
 ```bash
 # Resync unterbrechen
 echo 0 >/proc/sys/dev/raid/speed_limit_max
-cp -a /oldroot/. /mnt/.
+cp -av /oldroot/. /mnt/.
 # Resync fortsetzen
 echo 200000 >/proc/sys/dev/raid/speed_limit_max
 ```
@@ -190,7 +191,23 @@ chroot /mnt
 ```bash
 echo "cryptroot /dev/md1 none luks" >> /etc/crypttab
 ```
+
+# I think here the mess starts....
+#### 4.15
+rewrite initramfs ***?assume this should be right???***
+```bash
+mkinitcpio
+```
 Missing **initramfs neu schreiben** **GRUB neu schreiben**
+
+ssh-keygen -b 4096 -t rsa -m PEM -f /etc/ssh/ssh_host_rsa_key
+dropbearconvert openssh dropbear /etc/ssh/ssh_host_rsa_key /etc/dropbear/dropbear_rsa_host_key
+* https://github.com/random-archer/mkinitcpio-systemd-tool/issues/21
+* https://github.com/random-archer/mkinitcpio-systemd-tool/issues/17
+* https://bbs.archlinux.org/viewtopic.php?id=250512
+
+from point 4 on I have questions:
+https://wiki.archlinux.org/index.php/Dm-crypt/Specialties#chkboot
 
 #### 4.15
 ```bash
