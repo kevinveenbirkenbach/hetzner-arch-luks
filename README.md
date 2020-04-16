@@ -197,6 +197,7 @@ echo "cryptroot /dev/md1 none luks" >> /etc/crypttab
 rewrite initramfs ***?assume this should be right???***
 ```bash
 mkinitcpio
+mkinitcpio -p linux
 ```
 Missing **initramfs neu schreiben** **GRUB neu schreiben**
 
@@ -208,6 +209,9 @@ dropbearconvert openssh dropbear /etc/ssh/ssh_host_rsa_key /etc/dropbear/dropbea
 
 from point 4 on I have questions:
 https://wiki.archlinux.org/index.php/Dm-crypt/Specialties#chkboot
+
+check this one also out:
+* https://blog.simonszu.de/set-up-luks-on-a-physical-hetzner-server-with-debian/ -> specially the part about dropbear configuration and ssh keys
 
 #### 4.15
 ```bash
