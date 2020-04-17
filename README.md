@@ -97,12 +97,11 @@ with
 ```
 HOOKS=(base udev autodetect modconf block mdadm_udev lvm2 netconf dropbear encryptssh filesystems keyboard fsck)
 ```
-<span style="color:red">
-/etc/initramfs-tools/initramfs.conf anpassen <br>
+> :warning: In the original example the initramfs get modified. Don't know if this is still necessary:
+/etc/initramfs-tools/initramfs.conf<br>
 Alt: BUSYBOX=auto <br>
 Neu: BUSYBOX=y <br>
 http://daemons-point.com/blog/2019/10/20/hetzner-verschluesselt/#etcinitramfs-toolsinitramfsconf-anpassen
-</span>
 
 ### 4. Activate Encryption
 #### 4.1
@@ -198,22 +197,23 @@ chroot /mnt
 echo "cryptroot /dev/md1 none luks" >> /etc/crypttab
 ```
 #### 4.15
-rewrite initramfs <span style="color:red">***?assume this should be right???***</span>
 ```bash
 mkinitcpio -p linux
 ```
-Missing **initramfs neu schreiben** **GRUB neu schreiben**
+
 ### 5
-<span style="color:red">ist das folgende richtig</span>
+#### 5.1
+Install grub:
 ```bash
 pacman -S grub
 ```
-<span style="color:red">Is the following correct? See https://wiki.archlinux.org/index.php/Dm-crypt/Specialties#Remote_unlocking_(hooks:_netconf,_dropbear,_tinyssh,_ppp)</span>
+> :warning:  I'm not shure if the following is correct. Please check out this [link](https://wiki.archlinux.org/index.php/Dm-crypt/Specialties#Remote_unlocking_(hooks:_netconf,_dropbear,_tinyssh,_ppp)) . I appreciate feedback :two_hearts:
+#### 5.2
 Edit /etc/default/grub and tell the Kernel about the cryptdevice and the mdraid, and netconf that we want dhcp
 ```bash
 GRUB_CMDLINE_LINUX="cryptdevice=/dev/md0:root ip=dhcp"
 ```
-
+#### 5.3
 ```bash
 grub-mkconfig -o /boot/grub/grub.cfg
 ```
@@ -223,23 +223,7 @@ grub-install /dev/sda
 grub-install /dev/sdb
 ```
 
-ssh-keygen -b 4096 -t rsa -m PEM -f /etc/ssh/ssh_host_rsa_key
-dropbearconvert openssh dropbear /etc/ssh/ssh_host_rsa_key /etc/dropbear/dropbear_rsa_host_key
-* https://github.com/random-archer/mkinitcpio-systemd-tool/issues/21
-* https://github.com/random-archer/mkinitcpio-systemd-tool/issues/17
-* https://bbs.archlinux.org/viewtopic.php?id=250512
-
-from point 4 on I have questions:
-https://wiki.archlinux.org/index.php/Dm-crypt/Specialties#chkboot
-
-check this one also out:
-* https://blog.simonszu.de/set-up-luks-on-a-physical-hetzner-server-with-debian/ -> specially the part about dropbear configuration and ssh keys
-
-https://gist.github.com/HardenedArray/31915e3d73a4ae45adc0efa9ba458b07
-
-https://code.trafficking.agency/arch-linux-remote-unlock-root-volume-with-mdraid-and-dmcrypt.html
-
-#### 4.15
+#### 5.4
 ```bash
 exit
 umount /mnt/boot /mnt/proc /mnt/sys /mnt/dev
@@ -251,10 +235,24 @@ reboot
 
 
 ```
-
+### 6.
+#### 6.1
+Decrypt server:
+```bash
+ssh  -o UserKnownHostsFile=/dev/null root@your_server_ip
+cryptroot-unlock
+exit
+```
+#### 6.2
+Login to server:
+```bash
+ssh-keygen -f "$HOME/.ssh/known_hosts" -R your_server_ip
+ssh root@your_server_ip
+```
 ## Sources
 The code is adapted from the following guides:
 
 * http://daemons-point.com/blog/2019/10/20/hetzner-verschluesselt/
 * https://www.howtoforge.com/using-the-btrfs-filesystem-with-raid1-with-ubuntu-12.10-on-a-hetzner-server
+* https://code.trafficking.agency/arch-linux-remote-unlock-root-volume-with-mdraid-and-dmcrypt.html
 * https://wiki.archlinux.org/index.php/Dm-crypt/Specialties#Remote_unlocking_(hooks:_netconf,_dropbear,_tinyssh,_ppp)
