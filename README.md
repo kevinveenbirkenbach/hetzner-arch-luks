@@ -1,15 +1,30 @@
 # Arch Linux with LUKS and btrfs on a hetzner server (DRAFT)
-This guide should show you how to set up an System with the following specifications on an hetzner server:
-* Arch Linux
-* btrfs
-* LUKS
+
+## Software
+This guide shows how to set up the following software composition:
+* [Arch Linux](https://www.archlinux.de/)
+* [btrfs](https://en.wikipedia.org/wiki/Btrfs)
+* [LUKS](https://wiki.archlinux.org/index.php/Dm-crypt)
+
+## Requirements
+Written for a [Dedicated](https://de.wikipedia.org/wiki/Server#Dedizierte_Server) [Hetzner](https://www.hetzner.com/) server with the following hardware specifications:
+'''
+CPU1: Intel(R) Core(TM) i7-2600 CPU @ 3.40GHz (Cores 8)
+Memory:  15973 MB
+Disk /dev/sda: 3000 GB (=> 2794 GiB)
+Disk /dev/sdb: 3000 GB (=> 2794 GiB)
+Total capacity 5589 GiB with 2 Disks
+'''
 
 ## Legend
 The following symbols show you where to execute the code:
+### Environment
 * :computer: Client
 * :ambulance: Rescue System
 * :ghost: Chroot from Rescue System into Arch
 * :minidisc: Arch Os
+### Miscellaneous
+* :warning: Warning
 
 ## Guide
 ### 1. Configure and Install Image
