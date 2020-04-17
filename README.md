@@ -213,6 +213,10 @@ https://wiki.archlinux.org/index.php/Dm-crypt/Specialties#chkboot
 check this one also out:
 * https://blog.simonszu.de/set-up-luks-on-a-physical-hetzner-server-with-debian/ -> specially the part about dropbear configuration and ssh keys
 
+https://gist.github.com/HardenedArray/31915e3d73a4ae45adc0efa9ba458b07
+
+https://code.trafficking.agency/arch-linux-remote-unlock-root-volume-with-mdraid-and-dmcrypt.html
+
 #### 4.15
 ```bash
 exit
