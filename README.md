@@ -8,13 +8,13 @@ This guide shows how to set up the following software composition:
 
 ## Requirements
 Written for a [Dedicated](https://de.wikipedia.org/wiki/Server#Dedizierte_Server) [Hetzner](https://www.hetzner.com/) server with the following hardware specifications:
-'''
+```
 CPU1: Intel(R) Core(TM) i7-2600 CPU @ 3.40GHz (Cores 8)
 Memory:  15973 MB
 Disk /dev/sda: 3000 GB (=> 2794 GiB)
 Disk /dev/sdb: 3000 GB (=> 2794 GiB)
 Total capacity 5589 GiB with 2 Disks
-'''
+```
 
 ## Legend
 The following symbols show you where to execute the code:
