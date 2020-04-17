@@ -17,14 +17,11 @@ Total capacity 5589 GiB with 2 Disks
 ```
 
 ## Legend
-The following symbols show you where to execute the code:
-### Environment
+The following symbols show in which environment the code is executed:
 * :computer: Client
 * :ambulance: Rescue System
 * :ghost: Chroot from Rescue System into Arch
 * :minidisc: Arch Os
-### Miscellaneous
-* :warning: Warning
 
 ## Guide
 ### 1. Configure and Install Image
@@ -198,10 +195,8 @@ mount /dev/vg0/root /mnt
 #### 4.12 Copy "system"
 :ambulance: :
 ```bash
-# Resync unterbrechen
 echo 0 >/proc/sys/dev/raid/speed_limit_max
 cp -av /oldroot/. /mnt/.
-# Resync fortsetzen
 echo 200000 >/proc/sys/dev/raid/speed_limit_max
 ```
 
@@ -240,8 +235,10 @@ pacman -S grub
 Edit /etc/default/grub and tell the Kernel about the cryptdevice and the mdraid, and netconf that we want dhcp:
 
 ```bash
-GRUB_CMDLINE_LINUX="cryptdevice=/dev/md0:root ip=dhcp"
+GRUB_CMDLINE_LINUX="cryptdevice=/dev/md1:root ip=dhcp"
+GRUB_ENABLE_CRYPTODISK=y  # Not secure if necessary
 ```
+:information_source: Further [information](https://wiki.archlinux.org/index.php/Dm-crypt/Encrypting_an_entire_system#Configuring_GRUB).
 #### 5.3 Make and Install on Hard-drives
 :ghost: :
 ```bash
@@ -273,8 +270,8 @@ exit
 ssh-keygen -f "$HOME/.ssh/known_hosts" -R your_server_ip
 ssh root@your_server_ip
 ```
-## 7.1. Debugging
-### 7.2 Login to System from Rescue System
+## 7. Debugging
+### 7.1 Login to System from Rescue System
 :ambulance: :
 ```bash
 cryptsetup luksOpen /dev/md1 cryptroot
@@ -284,6 +281,14 @@ mount --bind /dev /mnt/dev
 mount --bind /sys /mnt/sys
 mount --bind /proc /mnt/proc
 chroot /mnt
+```
+### 7.2 Logout from chroot environment
+```bash
+exit
+umount /mnt/boot /mnt/proc /mnt/sys /mnt/dev
+umount /mnt
+sync
+reboot
 ```
 
 ## Sources
