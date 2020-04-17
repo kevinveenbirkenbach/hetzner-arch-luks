@@ -3,7 +3,166 @@ This guide should show you how to set up an System with the following specificat
 * Arch Linux
 * btrfs
 * LUKS
+* mdraid
+* dmcrypt
 
+It adapts the following instruction:
+* https://code.trafficking.agency/arch-linux-remote-unlock-root-volume-with-mdraid-and-dmcrypt.html
+## Guide
+### Preparing the Filesystems
+```bash
+# stop syncronisation before
+# partition the discs
+parted /dev/sda --align=opt --script mklabel msdos mkpart primary 0% 1GiB mkpart primary 1GiB 100%
+parted /dev/sdb --align=opt --script mklabel msdos mkpart primary 0% 1GiB mkpart primary 1GiB 100%
+# Modified because of https://askubuntu.com/questions/84538/trouble-creating-3tb-ext4-partition-due-to-msdos-partition-table-imposed-error
+#reboot
+```
+
+
+```bash
+# creating the filesystems, actually only /dev/sda1 is needed
+mkfs.ext4 -L boot /dev/sda1
+mkfs.ext4 -L boot /dev/sdb1
+
+# creating the raid
+mdadm --create --verbose --level=10 --metadata=1.2 --chunk=512 --raid-devices=2 --layout=f2 /dev/md0 /dev/sda2 /dev/sdb2
+
+# and creating the dmcrypt "container"
+cryptsetup -y -v luksFormat /dev/md0
+cryptsetup luksOpen /dev/md0 root
+
+# finally create the root filesystem
+mkfs.ext4 -v -L root -m 0.01 -b 4096 -E stride=128,stripe-width=256 /dev/mapper/root
+```
+### Preparing for Arch
+```bash
+mkdir /arch
+cd /arch
+# download arch bootstrap disc, please choose the correct version
+curl -O http://archlinux.mirrors.ovh.net/archlinux/iso/2020.04.01/archlinux-bootstrap-2020.04.01-x86_64.tar.gz
+tar xvfz archlinux-bootstrap-2020.04.01-x86_64.tar.gz
+```
+
+Edit /arch/root.x86_64/etc/pacman.d/mirrorlist and choose a mirror
+```bash
+nano /arch/root.x86_64/etc/pacman.d/mirrorlist
+```
+https://gist.github.com/neonb88/5ba848f1aef21ab67c7a4ff28e6d2ea3
+Just comment CheckSpace in /etc/pacman.conf
+Chroot into the bootstrap environment
+```bash
+/arch/root.x86_64/bin/arch-chroot /arch/root.x86_64/
+```
+### More preparations
+
+```bash
+# mount the soon-to-be root-volume
+mount /dev/mapper/root /mnt/
+
+# and boot-volume
+mkdir /mnt/boot
+mount /dev/sda1 /mnt/boot
+#https://unix.stackexchange.com/questions/490418/i-cant-make-a-grub-config
+mount --bind /proc /mnt/proc
+mount --bind /dev /mnt/dev
+mount --bind /sys /mnt/sys
+mount --bind /run /mnt/run
+
+# initialize the pacman keychain this takes a long time do something from a second terminal, like dd if=/dev/sda of=/dev/tty7
+pacman-key --init
+## check out which of the following orders make sense
+pacman-key --refresh-keys
+pacman-key --populate archlinux
+```
+Finally, bootstrap Arch onto the root-volume...
+```bash
+pacstrap /mnt base base-devel intel-ucode
+```
+
+And bootstrap mdadmin.conf (md configuration) and fstab
+```bash
+pacman -Syyu mdadm # Added druing writing of instruction
+mdadm --detail --scan >> /etc/mdadm.conf
+genfstab -p /mnt > /mnt/etc/fstab
+```
+
+Chroot into the new Arch installation
+```bash
+arch-chroot /mnt/
+```
+
+Setup hostname and locales
+```bash
+echo test > /etc/hostname
+
+echo LANG=en_US.UTF-8 > /etc/locale.conf
+echo LC_COLLATE=C >> /etc/locale.conf
+echo LANGUAGE=en_US >> /etc/locale.conf
+
+ln -sf /usr/share/zoneinfo/Europe/Berlin /etc/localtime
+```
+
+Edit locale.gen according to your locale, don't forget en_US.UTF-8 or else some applications might complain.
+```bash
+pacman-key --populate archlinux
+pacman -Syyu nano
+nano /etc/locale.gen
+
+locale-gen
+```
+### Setup early ssh with tinyssh and netconf
+```bash
+# some dependencies
+# dmraid here?
+pacman -S sudo mkinitcpio mkinitcpio-nfs-utils tinyssh mkinitcpio-netconf mkinitcpio-tinyssh mkinitcpio-utils #ucspi-tcp
+cd /tmp
+```
+Install mkinitcpio-netconf skipped because its in pacman.
+Install ucspi-tcp
+```bash
+curl -O https://aur.archlinux.org/cgit/aur.git/snapshot/ucspi-tcp.tar.gz
+tar xf ucspi-tcp.tar.gz
+chown -R nobody:nobody ucspi-tcp
+cd ucspi-tcp
+sudo -u nobody makepkg
+
+pacman -U ucspi-tcp-0.88-8-x86_64.pkg.tar.xz
+
+cd ..
+```
+Skipped nstall mkinitcpio-tinyssh skipped because its in pacman.
+Skipped nstall mkinitcpio-utils skipped because its in pacman.
+
+Edit /etc/mkinitcpio.conf and add ***mdadm_udev netconf tinyssh encryptssh*** before filesystems should look something like this
+```bash
+HOOKS="base udev autodetect modconf block mdadm_udev netconf tinyssh encryptssh filesystems keyboard fsck"
+```
+Rebuild the initramfs
+```bash
+pacman -S linux
+mkinitcpio -p linux
+```
+
+### Install and configure GRUB
+```bash
+#exit?
+pacman -S grub
+```
+Edit /etc/default/grub and tell the Kernel about the cryptdevice and the mdraid, and netconf that we want dhcp
+```bash
+GRUB_CMDLINE_LINUX="cryptdevice=/dev/md0:root ip=dhcp md=0,/dev/sda2,/dev/sdb2"
+```
+
+Generate the grub config
+```bash
+grub-mkconfig -o /boot/grub/grub.cfg
+```
+
+Install Grub to /dev/sda
+```bash
+grub-install /dev/sda
+```
 ## Guide
 ### 1. Configure and Install Image
 #### 1.1
