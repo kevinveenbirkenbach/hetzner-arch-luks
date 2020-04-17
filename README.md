@@ -6,19 +6,19 @@ This guide should show you how to set up an System with the following specificat
 
 ## Guide
 ### 1. Configure and Install Image
-#### 1.1
-Login to Hetzner Rescue System
+#### 1.1 Login to Hetzner Rescue System
 ```bash
 ssh root@your_server_ip
 ```
-#### 1.2
-Create the autosetup by executing
+#### 1.2 Create the /autosetup
+
+Execute
 
 ```bash
 nano /autosetup
 ```
 
-and saving the following content into this file:
+and save the following content into this file:
 
 ```bash
 ##  Hetzner Online GmbH - installimage - config
@@ -49,51 +49,44 @@ LV vg0   root   /        btrfs        10G
 ##  OPERATING SYSTEM IMAGE:
 IMAGE /root/.oldroot/nfs/install/../images/archlinux-latest-64-minimal.tar.gz
 ```
-#### 1.3
-Afterwards install the image by executing the following command:
+#### 1.3 Install Image
 
 ```bash
 installimage
 ```
-#### 1.4
-When the setup finished restart the server via
+#### 1.4 Restart
 ```bash
 reboot
 ```
 
 ### 2. Setup System
-#### 2.1
-Login to your server:
+#### 2.1 Login to server
 
 ```bash
-ssh-keygen -f "$HOME/.ssh/known_hosts" -R your_server_ip #revokes old ssh_host
+ssh-keygen -f "$HOME/.ssh/known_hosts" -R your_server_ip
 ssh root@your_server_ip
 ```
-#### 2.2
-Update the system:
+#### 2.2 Update the system
 ```bash
 pacman -Syyu
 ```
-#### 2.3
-Install basic administration software:
+#### 2.3 Install administration tools:
 ```bash
 pacman -S nano
 ```
 
-#### 3. Prepare System for Unlocking via SSH
+### 3. Prepare System for Unlocking via SSH
 #### 3.1 Execute the following script
 ```bash
-# Install software
 pacman -S busybox mkinitcpio-dropbear mkinitcpio-utils mkinitcpio-netconf
-#Copy ssh-key
 cp -v ~/.ssh/authorized_keys /etc/dropbear/root_key
 ```
-#### 3.2
-Replace the following line in **/etc/mkinitcpio.conf**
+#### 3.2 Replace line in **/etc/mkinitcpio.conf**
+Old:
 ```
 HOOKS=(base udev autodetect modconf block mdadm_udev lvm2 filesystems keyboard fsck)
 ```
-with
+New:
 ```
 HOOKS=(base udev autodetect modconf block mdadm_udev lvm2 netconf dropbear encryptssh filesystems keyboard fsck)
 ```
@@ -106,55 +99,47 @@ http://daemons-point.com/blog/2019/10/20/hetzner-verschluesselt/#etcinitramfs-to
 ### 4. Activate Encryption
 #### 4.1
 Activate the rescue system https://robot.your-server.de/server
-#### 4.2
-Afterwards reboot the system by entering:
-
+#### 4.2 Reboot
 ```bash
 reboot
 ```
-#### 4.3
-Login to the rescue system:
+#### 4.3 Login to the rescue system
 ```bash
-ssh-keygen -f "$HOME/.ssh/known_hosts" -R your_server_ip #revokes old ssh_host
+ssh-keygen -f "$HOME/.ssh/known_hosts" -R your_server_ip
 ssh root@your_server_ip
 ```
 
-#### 4.4
-Mount the "system" by:
+#### 4.4 Mount the "system"
 ```bash
 vgscan -v
 vgchange -a y
 mount /dev/mapper/vg0-root /mnt
 ```
-#### 4.5
-Copy "system":
+
+#### 4.5 Copy "system"
 ```bash
-# Resync unterbrechen
 echo 0 >/proc/sys/dev/raid/speed_limit_max
 mkdir /oldroot
 cp -va /mnt/. /oldroot/.
-# Resync fortsetzen
 echo 200000 >/proc/sys/dev/raid/speed_limit_max
 ```
-#### 4.6
-Unmount the "system" by:
+#### 4.6 Unmount the "system"
+
 ```bash
 umount /mnt
 ```
 
-#### 4.7
-Delete unencrypted LVM-Volume-Group by executing:
+#### 4.7 Delete decrypted LVM-Volume-Group
 ```bash
 vgremove vg0
 ```
 
-#### 4.8
-Check drive state:
+#### 4.8 Check drive state
+
 ```bash
 cat /proc/mdstat
 ```
-#### 4.9
-Encrypt MD1 by executing:
+#### 4.9 Encrypt MD1 by executing
 ```bash
 cryptsetup --cipher aes-xts-plain64 --key-size 256 --hash sha256 --iter-time=10000 luksFormat /dev/md1
 cryptsetup luksOpen /dev/md1 cryptroot
@@ -166,14 +151,12 @@ mkfs.btrfs /dev/vg0/root
 mkswap /dev/vg0/swap
 ```
 
-#### 4.10
-Mount encrypted :
+#### 4.10 Mount encrypted
 ```bash
 mount /dev/vg0/root /mnt
 ```
 
-#### 4.12
-Copy "system":
+#### 4.12 Copy "system"
 ```bash
 # Resync unterbrechen
 echo 0 >/proc/sys/dev/raid/speed_limit_max
@@ -182,8 +165,7 @@ cp -av /oldroot/. /mnt/.
 echo 200000 >/proc/sys/dev/raid/speed_limit_max
 ```
 
-#### 4.13
-Integrate finale installation:
+#### 4.13 Integrate Finale Installation
 ```bash
 mount /dev/md0 /mnt/boot
 mount --bind /dev /mnt/dev
@@ -196,59 +178,63 @@ chroot /mnt
 ```bash
 echo "cryptroot /dev/md1 none luks" >> /etc/crypttab
 ```
-#### 4.15
+#### 4.15  Create an initial ramdisk
 ```bash
 mkinitcpio -p linux
 ```
 
-### 5
-#### 5.1
-Install grub:
+### 5 Grub
+#### 5.1 Install Grub
 ```bash
 pacman -S grub
 ```
+#### 5.2 Configure /etc/default/grub
 > :warning:  I'm not shure if the following is correct. Please check out this [link](https://wiki.archlinux.org/index.php/Dm-crypt/Specialties#Remote_unlocking_(hooks:_netconf,_dropbear,_tinyssh,_ppp)) . I appreciate feedback :two_hearts:
-#### 5.2
-Edit /etc/default/grub and tell the Kernel about the cryptdevice and the mdraid, and netconf that we want dhcp
+
+Edit /etc/default/grub and tell the Kernel about the cryptdevice and the mdraid, and netconf that we want dhcp:
 ```bash
 GRUB_CMDLINE_LINUX="cryptdevice=/dev/md0:root ip=dhcp"
 ```
-#### 5.3
+#### 5.3 Make and Install on Hard-drives
 ```bash
 grub-mkconfig -o /boot/grub/grub.cfg
-```
-
-```bash
 grub-install /dev/sda
 grub-install /dev/sdb
 ```
 
-#### 5.4
+#### 5.4 Restart System
 ```bash
 exit
 umount /mnt/boot /mnt/proc /mnt/sys /mnt/dev
 umount /mnt
 sync
-
 #Neustart
 reboot
-
-
 ```
-### 6.
-#### 6.1
-Decrypt server:
+### 6. Encryption Procedure
+#### 6.1 Decrypt server
 ```bash
 ssh  -o UserKnownHostsFile=/dev/null root@your_server_ip
 cryptroot-unlock
 exit
 ```
-#### 6.2
-Login to server:
+#### 6.2 Login to server
 ```bash
 ssh-keygen -f "$HOME/.ssh/known_hosts" -R your_server_ip
 ssh root@your_server_ip
 ```
+## 7.1. Debugging
+### 7.2 Login to System from Rescue System
+```bash
+cryptsetup luksOpen /dev/md1 cryptroot
+mount /dev/vg0/root /mnt
+mount /dev/md0 /mnt/boot
+mount --bind /dev /mnt/dev
+mount --bind /sys /mnt/sys
+mount --bind /proc /mnt/proc
+chroot /mnt
+```
+
 ## Sources
 The code is adapted from the following guides:
 
