@@ -77,14 +77,14 @@ pacman -Syyu
 #### 2.3
 Install basic administration software:
 ```bash
-pacman -Syyu nano
+pacman -S nano
 ```
 
 #### 3. Prepare System for Unlocking via SSH
 #### 3.1 Execute the following script
 ```bash
 # Install software
-pacman -Syyu busybox mkinitcpio-dropbear mkinitcpio-utils mkinitcpio-netconf
+pacman -S busybox mkinitcpio-dropbear mkinitcpio-utils mkinitcpio-netconf
 #Copy ssh-key
 cp -v ~/.ssh/authorized_keys /etc/dropbear/root_key
 ```
@@ -95,8 +95,14 @@ HOOKS=(base udev autodetect modconf block mdadm_udev lvm2 filesystems keyboard f
 ```
 with
 ```
-HOOKS=(netconf dropbear encryptssh base udev autodetect modconf block mdadm_udev lvm2 filesystems keyboard fsck)
+HOOKS=(base udev autodetect modconf block mdadm_udev lvm2 netconf dropbear encryptssh filesystems keyboard fsck)
 ```
+<span style="color:red">
+/etc/initramfs-tools/initramfs.conf anpassen <br>
+Alt: BUSYBOX=auto <br>
+Neu: BUSYBOX=y <br>
+http://daemons-point.com/blog/2019/10/20/hetzner-verschluesselt/#etcinitramfs-toolsinitramfsconf-anpassen
+</span>
 
 ### 4. Activate Encryption
 #### 4.1
@@ -191,15 +197,31 @@ chroot /mnt
 ```bash
 echo "cryptroot /dev/md1 none luks" >> /etc/crypttab
 ```
-
-# I think here the mess starts....
 #### 4.15
-rewrite initramfs ***?assume this should be right???***
+rewrite initramfs <span style="color:red">***?assume this should be right???***</span>
 ```bash
-mkinitcpio
 mkinitcpio -p linux
 ```
 Missing **initramfs neu schreiben** **GRUB neu schreiben**
+### 5
+<span style="color:red">ist das folgende richtig</span>
+```bash
+pacman -S grub
+```
+<span style="color:red">Is the following correct? See https://wiki.archlinux.org/index.php/Dm-crypt/Specialties#Remote_unlocking_(hooks:_netconf,_dropbear,_tinyssh,_ppp)</span>
+Edit /etc/default/grub and tell the Kernel about the cryptdevice and the mdraid, and netconf that we want dhcp
+```bash
+GRUB_CMDLINE_LINUX="cryptdevice=/dev/md0:root ip=dhcp"
+```
+
+```bash
+grub-mkconfig -o /boot/grub/grub.cfg
+```
+
+```bash
+grub-install /dev/sda
+grub-install /dev/sdb
+```
 
 ssh-keygen -b 4096 -t rsa -m PEM -f /etc/ssh/ssh_host_rsa_key
 dropbearconvert openssh dropbear /etc/ssh/ssh_host_rsa_key /etc/dropbear/dropbear_rsa_host_key
