@@ -13,8 +13,8 @@ It adapts the following instruction:
 ```bash
 # stop syncronisation before
 # partition the discs
-parted /dev/sda --align=opt --script mklabel msdos mkpart primary 0% 1GiB mkpart primary 1GiB 100%
-parted /dev/sdb --align=opt --script mklabel msdos mkpart primary 0% 1GiB mkpart primary 1GiB 100%
+parted /dev/sda --align=opt --script mklabel gpt mkpart primary 0% 1GiB mkpart primary 1GiB 100%
+parted /dev/sdb --align=opt --script mklabel gpt mkpart primary 0% 1GiB mkpart primary 1GiB 100%
 # Modified because of https://askubuntu.com/questions/84538/trouble-creating-3tb-ext4-partition-due-to-msdos-partition-table-imposed-error
 #reboot
 ```
@@ -49,7 +49,7 @@ Edit /arch/root.x86_64/etc/pacman.d/mirrorlist and choose a mirror
 nano /arch/root.x86_64/etc/pacman.d/mirrorlist
 ```
 https://gist.github.com/neonb88/5ba848f1aef21ab67c7a4ff28e6d2ea3
-Just comment CheckSpace in /etc/pacman.conf
+Just comment CheckSpace in /arch/root.x86_64/etc/pacman.conf
 Chroot into the bootstrap environment
 ```bash
 /arch/root.x86_64/bin/arch-chroot /arch/root.x86_64/
@@ -64,16 +64,16 @@ mount /dev/mapper/root /mnt/
 mkdir /mnt/boot
 mount /dev/sda1 /mnt/boot
 #https://unix.stackexchange.com/questions/490418/i-cant-make-a-grub-config
-mount --bind /proc /mnt/proc
-mount --bind /dev /mnt/dev
-mount --bind /sys /mnt/sys
-mount --bind /run /mnt/run
+#mount --bind /proc /mnt/proc
+#mount --bind /dev /mnt/dev
+#mount --bind /sys /mnt/sys
+#mount --bind /run /mnt/run
 
 # initialize the pacman keychain this takes a long time do something from a second terminal, like dd if=/dev/sda of=/dev/tty7
 pacman-key --init
 ## check out which of the following orders make sense
-pacman-key --refresh-keys
 pacman-key --populate archlinux
+pacman-key --refresh-keys
 ```
 Finally, bootstrap Arch onto the root-volume...
 ```bash
@@ -114,6 +114,7 @@ locale-gen
 ### Setup early ssh with tinyssh and netconf
 ```bash
 # some dependencies
+# exit?
 # dmraid here?
 pacman -S sudo mkinitcpio mkinitcpio-nfs-utils tinyssh mkinitcpio-netconf mkinitcpio-tinyssh mkinitcpio-utils #ucspi-tcp
 cd /tmp
