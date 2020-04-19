@@ -1,4 +1,4 @@
-# Arch Linux with LUKS and btrfs on a hetzner server (DRAFT)
+# Arch Linux with LUKS and btrfs on a Hetzner server (DRAFT)
 
 ## Software
 This guide shows how to set up the following software composition:
@@ -19,9 +19,9 @@ Total capacity 5589 GiB with 2 Disks
 ## Legend
 The following symbols show in which environment the code is executed:
 * :computer: Client
-* :ambulance: Rescue System
+* :ambulance: [Hetzner Rescue System](https://wiki.hetzner.de/index.php/Hetzner_Rescue-System/en)
 * :ghost: Chroot from Rescue System into Arch
-* :minidisc: Arch Os
+* :minidisc: Arch OS
 
 ## Guide
 ### 1. Configure and Install Image
@@ -99,10 +99,25 @@ pacman -S nano
 ```
 
 ### 3. Prepare System for Unlocking via SSH
-#### 3.1 Execute the following script
+#### 3.1 Install software
 :minidisc: :
 ```bash
 pacman -S busybox mkinitcpio-dropbear mkinitcpio-utils mkinitcpio-netconf
+```
+#### 3.3 Copy authorized keys to dropbear
+> :warning: I don't know if the following step is correct. Later during executing ***mkinitcpio -p linux*** the following error appears:
+```bash
+-> Running build hook: [dropbear]
+Error: Unrecognised key type
+Error reading key from '/etc/ssh/ssh_host_rsa_key'
+Error: Unrecognised key type
+Error reading key from '/etc/ssh/ssh_host_dsa_key'
+Error: Unrecognised key type
+Error reading key from '/etc/ssh/ssh_host_ecdsa_key'
+```
+I assume this is connected to this.
+
+```bash
 cp -v ~/.ssh/authorized_keys /etc/dropbear/root_key
 ```
 #### 3.2 Modify /etc/mkinitcpio.conf
@@ -119,11 +134,15 @@ New:
 ```
 HOOKS=(base udev autodetect modconf block mdadm_udev lvm2 netconf dropbear encryptssh filesystems keyboard fsck)
 ```
-> :warning: In the original example the initramfs get modified. Don't know if this is still necessary:
-/etc/initramfs-tools/initramfs.conf<br>
-Alt: BUSYBOX=auto <br>
-Neu: BUSYBOX=y <br>
-http://daemons-point.com/blog/2019/10/20/hetzner-verschluesselt/#etcinitramfs-toolsinitramfsconf-anpassen
+> :warning: In [one of the guides](http://daemons-point.com/blog/2019/10/20/hetzner-verschluesselt/#etcinitramfs-toolsinitramfsconf-anpassen) the ***/etc/initramfs-tools/initramfs.conf*** get modified. Don't know how to implement this for ***mkinitcpio***.<br>
+**Old:**
+```
+BUSYBOX=auto
+```
+**New:**
+```
+BUSYBOX=y
+```
 
 ### 4. Activate Encryption
 #### 4.1 Activate Rescue System
@@ -229,11 +248,17 @@ mkinitcpio -p linux
 pacman -S grub
 ```
 #### 5.2 Configure /etc/default/grub
+
 :ghost: :
+
+```bash
+nano /etc/default/grub
+```
 > :warning:  I'm not shure if the following is correct. Please check out this [link](https://wiki.archlinux.org/index.php/Dm-crypt/Specialties#Remote_unlocking_(hooks:_netconf,_dropbear,_tinyssh,_ppp)) . I appreciate feedback :two_hearts:
 
-Edit /etc/default/grub and tell the Kernel about the cryptdevice and the mdraid, and netconf that we want dhcp:
+> :warning: I don't know if the raid also needs to be configured in the GRUB_CMDLINE_LINUX parameter.
 
+Change the following parameters:
 ```bash
 GRUB_CMDLINE_LINUX="cryptdevice=/dev/md1:root ip=dhcp"
 GRUB_ENABLE_CRYPTODISK=y  # Not secure if necessary
@@ -283,12 +308,22 @@ mount --bind /proc /mnt/proc
 chroot /mnt
 ```
 ### 7.2 Logout from chroot environment
+:ghost: :ambulance :
 ```bash
 exit
 umount /mnt/boot /mnt/proc /mnt/sys /mnt/dev
 umount /mnt
 sync
 reboot
+```
+
+### 7.3 Regenerate GRUB and Arch
+:ghost: :
+```bash
+mkinitcpio -p linux
+grub-mkconfig -o /boot/grub/grub.cfg
+grub-install /dev/sda
+grub-install /dev/sdb
 ```
 
 ## Sources
