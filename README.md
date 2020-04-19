@@ -104,7 +104,7 @@ pacman -S nano
 ```bash
 pacman -S busybox mkinitcpio-dropbear mkinitcpio-utils mkinitcpio-netconf
 ```
-#### 3.3 Copy authorized keys to dropbear
+#### 3.2 Copy authorized keys to dropbear
 > :warning: I don't know if the following step is correct. Later during executing ***mkinitcpio -p linux*** the following error appears:
 ```bash
 -> Running build hook: [dropbear]
@@ -116,21 +116,24 @@ Error: Unrecognised key type
 Error reading key from '/etc/ssh/ssh_host_ecdsa_key'
 ```
 I assume this is connected to this.
+The following links may help to solve the problem:
+* https://github.com/grazzolini/mkinitcpio-dropbear/issues/8
 
 ```bash
 cp -v ~/.ssh/authorized_keys /etc/dropbear/root_key
 ```
-#### 3.2 Modify /etc/mkinitcpio.conf
+
+#### 3.3 Modify /etc/mkinitcpio.conf
 :minidisc: :
 ```bash
 nano /etc/mkinitcpio.conf
 ```
 ##### Replace
-Old:
+**Old:**
 ```
 HOOKS=(base udev autodetect modconf block mdadm_udev lvm2 filesystems keyboard fsck)
 ```
-New:
+**New:**
 ```
 HOOKS=(base udev autodetect modconf block mdadm_udev lvm2 netconf dropbear encryptssh filesystems keyboard fsck)
 ```
@@ -308,7 +311,7 @@ mount --bind /proc /mnt/proc
 chroot /mnt
 ```
 ### 7.2 Logout from chroot environment
-:ghost: :ambulance :
+:ghost: :ambulance: :
 ```bash
 exit
 umount /mnt/boot /mnt/proc /mnt/sys /mnt/dev
