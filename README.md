@@ -124,6 +124,26 @@ The following links may help to solve the problem:
 cp -v ~/.ssh/authorized_keys /etc/dropbear/root_key
 ```
 
+```bash
+rm /etc/ssh/ssh_host_*
+ssh-keygen -A -m PEM
+```
+
+or
+
+```bash
+ssh-keygen -m PEM -p -b 8192 -t ecdsa -f /etc/ssh/ssh_host_ecdsa_key
+ssh-keygen -m PEM -p -b 8192 -t rsa -f /etc/ssh/ssh_host_rsa_key
+ssh-keygen -m PEM -p -b 8192 -t dsa -f /etc/ssh/ssh_host_dsa_key
+ssh-keygen -y -f /etc/ssh/ssh_host_ecdsa_key > /etc/ssh/ssh_host_ecdsa_key.pub
+ssh-keygen -y -f /etc/ssh/ssh_host_rsa_key > /etc/ssh/ssh_host_rsa_key.pub
+ssh-keygen -y -f /etc/ssh/ssh_host_dsa_key > /etc/ssh/ssh_host_dsa_key.pub
+```
+
+```bash
+dropbearconvert openssh dropbear /etc/ssh/ssh_host_rsa_key /etc/dropbear/dropbear_rsa_host_key
+dropbearconvert openssh dropbear /etc/ssh/ssh_host_dsa_key /etc/dropbear/dropbear_dss_host_key
+```
 #### 3.3 Modify /etc/mkinitcpio.conf
 :minidisc: :
 ```bash
@@ -337,3 +357,4 @@ The code is adapted from the following guides:
 * https://www.howtoforge.com/using-the-btrfs-filesystem-with-raid1-with-ubuntu-12.10-on-a-hetzner-server
 * https://code.trafficking.agency/arch-linux-remote-unlock-root-volume-with-mdraid-and-dmcrypt.html
 * https://wiki.archlinux.org/index.php/Dm-crypt/Specialties#Remote_unlocking_(hooks:_netconf,_dropbear,_tinyssh,_ppp)
+* https://gist.github.com/pezz/5310082
