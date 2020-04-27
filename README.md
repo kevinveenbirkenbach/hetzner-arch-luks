@@ -118,6 +118,7 @@ Error reading key from '/etc/ssh/ssh_host_ecdsa_key'
 I assume this is connected to this.
 The following links may help to solve the problem:
 * https://github.com/grazzolini/mkinitcpio-dropbear/issues/8
+* https://www.reddit.com/r/archlinux/comments/a8pcff/remote_unlock_encrypted_archlinux_with/
 
 ```bash
 cp -v ~/.ssh/authorized_keys /etc/dropbear/root_key
