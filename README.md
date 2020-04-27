@@ -124,27 +124,19 @@ The following links may help to solve the problem:
 cp -v ~/.ssh/authorized_keys /etc/dropbear/root_key
 ```
 
+#### 3.3 Regenerate OpenSSH keys
+:minidisc: :
 ```bash
 rm /etc/ssh/ssh_host_*
 ssh-keygen -A -m PEM
 ```
-
-or
-
-```bash
-ssh-keygen -m PEM -p -b 8192 -t ecdsa -f /etc/ssh/ssh_host_ecdsa_key
-ssh-keygen -m PEM -p -b 8192 -t rsa -f /etc/ssh/ssh_host_rsa_key
-ssh-keygen -m PEM -p -b 8192 -t dsa -f /etc/ssh/ssh_host_dsa_key
-ssh-keygen -y -f /etc/ssh/ssh_host_ecdsa_key > /etc/ssh/ssh_host_ecdsa_key.pub
-ssh-keygen -y -f /etc/ssh/ssh_host_rsa_key > /etc/ssh/ssh_host_rsa_key.pub
-ssh-keygen -y -f /etc/ssh/ssh_host_dsa_key > /etc/ssh/ssh_host_dsa_key.pub
-```
-
+#### 3.4 Import SSH-keys to dropbear
+:minidisc: :
 ```bash
 dropbearconvert openssh dropbear /etc/ssh/ssh_host_rsa_key /etc/dropbear/dropbear_rsa_host_key
-dropbearconvert openssh dropbear /etc/ssh/ssh_host_dsa_key /etc/dropbear/dropbear_dss_host_key
 ```
-#### 3.3 Modify /etc/mkinitcpio.conf
+
+#### 3.5 Modify /etc/mkinitcpio.conf
 :minidisc: :
 ```bash
 nano /etc/mkinitcpio.conf
