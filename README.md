@@ -124,6 +124,13 @@ The following links may help to solve the problem:
 cp -v ~/.ssh/authorized_keys /etc/dropbear/root_key
 ```
 
+
+```bash
+chmod 700 ~/.ssh
+chmod 600 ~/.ssh/authorized_keys
+systemctl enable sshd
+```
+
 #### 3.3 Regenerate OpenSSH keys
 :minidisc: :
 ```bash
