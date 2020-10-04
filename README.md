@@ -283,7 +283,7 @@ nano /etc/default/grub
 
 Change the following parameters:
 ```bash
-GRUB_CMDLINE_LINUX="cryptdevice=/dev/md1:root ip=dhcp"
+GRUB_CMDLINE_LINUX="cryptdevice=/dev/md1:cryptroot ip=dhcp"
 GRUB_ENABLE_CRYPTODISK=y  # Not secure if necessary
 ```
 :information_source: Further [information](https://wiki.archlinux.org/index.php/Dm-crypt/Encrypting_an_entire_system#Configuring_GRUB).
