@@ -1,4 +1,4 @@
-# Arch Linux with LUKS and btrfs on a Hetzner server (DRAFT)
+# Arch Linux with LUKS and btrfs on a Hetzner server
 
 ## Software
 This guide shows how to set up the following software composition:
@@ -105,25 +105,10 @@ pacman -S nano
 pacman -S busybox mkinitcpio-dropbear mkinitcpio-utils mkinitcpio-netconf
 ```
 #### 3.2 Copy authorized keys to dropbear
-> :warning: I don't know if the following step is correct. Later during executing ***mkinitcpio -p linux*** the following error appears:
-```bash
--> Running build hook: [dropbear]
-Error: Unrecognised key type
-Error reading key from '/etc/ssh/ssh_host_rsa_key'
-Error: Unrecognised key type
-Error reading key from '/etc/ssh/ssh_host_dsa_key'
-Error: Unrecognised key type
-Error reading key from '/etc/ssh/ssh_host_ecdsa_key'
-```
-I assume this is connected to this.
-The following links may help to solve the problem:
-* https://github.com/grazzolini/mkinitcpio-dropbear/issues/8
-* https://www.reddit.com/r/archlinux/comments/a8pcff/remote_unlock_encrypted_archlinux_with/
-
+:minidisc: :
 ```bash
 cp -v ~/.ssh/authorized_keys /etc/dropbear/root_key
 ```
-
 
 ```bash
 chmod 700 ~/.ssh
@@ -156,15 +141,6 @@ HOOKS=(base udev autodetect modconf block mdadm_udev lvm2 filesystems keyboard f
 **New:**
 ```
 HOOKS=(base udev autodetect modconf block mdadm_udev lvm2 netconf dropbear encryptssh filesystems keyboard fsck)
-```
-> :warning: In [one of the guides](http://daemons-point.com/blog/2019/10/20/hetzner-verschluesselt/#etcinitramfs-toolsinitramfsconf-anpassen) the ***/etc/initramfs-tools/initramfs.conf*** get modified. Don't know how to implement this for ***mkinitcpio***.<br>
-**Old:**
-```
-BUSYBOX=auto
-```
-**New:**
-```
-BUSYBOX=y
 ```
 
 ### 4. Activate Encryption
@@ -277,9 +253,6 @@ pacman -S grub
 ```bash
 nano /etc/default/grub
 ```
-> :warning:  I'm not shure if the following is correct. Please check out this [link](https://wiki.archlinux.org/index.php/Dm-crypt/Specialties#Remote_unlocking_(hooks:_netconf,_dropbear,_tinyssh,_ppp)) . I appreciate feedback :two_hearts:
-
-> :warning: I don't know if the raid also needs to be configured in the GRUB_CMDLINE_LINUX parameter.
 
 Change the following parameters:
 ```bash
