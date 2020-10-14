@@ -291,8 +291,16 @@ exit
 ssh-keygen -f "$HOME/.ssh/known_hosts" -R your_server_ip
 ssh root@your_server_ip
 ```
-## 7. Debugging
-### 7.1 Login to System from Rescue System
+
+#### 7. Expand filesystem
+:computer: :
+```bash
+lvresize -l +100%FREE /dev/vg0/root
+btrfs filesystem resize max /
+```
+
+## 8. Debugging
+### 8.1 Login to System from Rescue System
 :ambulance: :
 ```bash
 cryptsetup luksOpen /dev/md1 cryptroot
@@ -303,7 +311,7 @@ mount --bind /sys /mnt/sys
 mount --bind /proc /mnt/proc
 chroot /mnt
 ```
-### 7.2 Logout from chroot environment
+### 8.2 Logout from chroot environment
 :ghost: :ambulance: :
 ```bash
 exit
@@ -313,7 +321,7 @@ sync
 reboot
 ```
 
-### 7.3 Regenerate GRUB and Arch
+### 8.3 Regenerate GRUB and Arch
 :ghost: :
 ```bash
 mkinitcpio -p linux
