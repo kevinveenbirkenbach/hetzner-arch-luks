@@ -1,0 +1,39 @@
+# Python build / runtime artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+.eggs/
+build/
+dist/
+wheels/
+pip-wheel-metadata/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.coverage
+.coverage.*
+htmlcov/
+
+# Editor / IDE
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+
+# Claude Code: personal overrides (settings.json itself is checked in)
+.claude/settings.local.json
+
+# Diagnostic output from `hal diagnose ... | tee diagnose-*.log`
+diagnose-*.log

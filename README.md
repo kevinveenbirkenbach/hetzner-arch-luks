@@ -23,12 +23,30 @@ The following symbols show in which environment the code is executed:
 * :ghost: Chroot from Rescue System into Arch
 * :minidisc: Arch OS
 
+## CLI helper (`hal`)
+This repo ships a small Python CLI (`hal`) that wraps the recurring SSH / LUKS / chroot dances. Install it once on your client:
+
+```bash
+pip install --user -e .
+```
+
+After that, `hal` is on your `$PATH`. Subcommands used throughout the guide:
+
+| Command | What it does |
+|---|---|
+| `hal status <host>` | Probe reachability (ping, ports 22/222, SSH banner). No login. |
+| `hal connect rescue <host>` | Wait for rescue, drop known_hosts entry, SSH in as root. |
+| `hal connect chroot <host>` | Prompt LUKS passphrase **first** (hidden), then via rescue: assemble RAID → unlock LUKS → mount → drop into `chroot /mnt /bin/bash`. |
+| `hal diagnose <host>` | Same setup as `connect chroot`, then runs a fixed diagnostic script inside the chroot and prints the report to stdout. |
+
+The passphrase prompt happens *before* the SSH connection is established, so you can type it once, walk away, and the rest runs unattended.
+
 ## Guide
 ### 1. Configure and Install Image
 #### 1.1 Login to Hetzner Rescue System
 :computer: :
 ```bash
-ssh root@your_server_ip
+hal connect rescue your_server_ip
 ```
 #### 1.2 Create the /autosetup
 
@@ -154,8 +172,7 @@ reboot
 #### 4.3 Login to the rescue system
 :computer: :
 ```bash
-ssh-keygen -f "$HOME/.ssh/known_hosts" -R your_server_ip
-ssh root@your_server_ip
+hal connect rescue your_server_ip
 ```
 
 #### 4.4 Mount the "system"
@@ -301,6 +318,26 @@ btrfs filesystem resize max /
 
 ## 8. Debugging
 ### 8.1 Login to System from Rescue System
+With the rescue system already activated and running, drop straight into the chroot from your client:
+
+:computer: :
+```bash
+hal connect chroot your_server_ip
+```
+You'll be prompted for the LUKS passphrase first (hidden input). The CLI then waits for rescue, assembles the RAID, opens LUKS, activates LVM, mounts `/mnt` + `/mnt/boot` + the pseudo-filesystems, and drops you into `chroot /mnt /bin/bash`. Idempotent — re-running while already mounted just re-enters the chroot.
+
+### 8.2 Collect diagnostics in one shot
+If you want a non-interactive snapshot of the installed system's state (package versions, last-boot journal errors, sshd status, `/boot` contents, etc.):
+
+:computer: :
+```bash
+hal diagnose your_server_ip | tee "diagnose-$(date +%F-%H%M).log"
+```
+The CLI runs the same setup as `connect chroot` and then a fixed inspection script inside the chroot. Output goes to stdout (and the log file via `tee`).
+
+<details>
+<summary>Manual equivalent of the unlock + mount sequence</summary>
+
 :ambulance: :
 ```bash
 cryptsetup luksOpen /dev/md1 cryptroot
@@ -311,7 +348,8 @@ mount --bind /sys /mnt/sys
 mount --bind /proc /mnt/proc
 chroot /mnt
 ```
-### 8.2 Logout from chroot environment
+</details>
+### 8.3 Logout from chroot environment
 :ghost: :ambulance: :
 ```bash
 exit
@@ -321,7 +359,7 @@ sync
 reboot
 ```
 
-### 8.3 Regenerate GRUB and Arch
+### 8.4 Regenerate GRUB and Arch
 :ghost: :
 ```bash
 mkinitcpio -p linux

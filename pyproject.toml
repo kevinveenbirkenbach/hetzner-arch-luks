@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hetzner-arch-luks"
+version = "0.1.0"
+description = "CLI helpers for the hetzner-arch-luks setup: connect to rescue, drop into the encrypted chroot, probe reachability, collect diagnostics."
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [{ name = "Kevin Veen-Birkenbach" }]
+license = { text = "Proprietary" }
+classifiers = [
+  "Environment :: Console",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3",
+]
+
+[project.scripts]
+hal = "hetzner_arch_luks.cli:main"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+hetzner_arch_luks = ["resources/**/*.sh"]

@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "allow": [
+      "Edit",
+      "Write",
+      "Bash(*)",
+      "WebFetch(domain:pypi.org)",
+      "WebFetch(domain:files.pythonhosted.org)",
+      "Bash(python3 -c ' *)",
+      "WebFetch(domain:api.github.com)"
+    ],
+    "ask": [
+      "Bash(*hal *)",
+      "Bash(*hetzner_arch_luks *)",
+      "Bash(ssh *)",
+      "Bash(scp *)",
+      "Bash(sftp *)"
+    ]
+  },
+  "sandbox": {
+    "enabled": true,
+    "autoAllowBashIfSandboxed": true,
+    "network": {
+      "allowedDomains": [
+        "*"
+      ]
+    }
+  }
+}
