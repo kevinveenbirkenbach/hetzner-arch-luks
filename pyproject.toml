@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hetzner-arch-luks"
-version = "0.1.0"
+version = "1.0.0"
 description = "End-to-end CLI (`hal`) for installing, encrypting, debugging and maintaining an Arch Linux server on Hetzner Dedicated hardware with software RAID, LUKS full-disk encryption, btrfs on LVM, and remote unlock via dropbear in the initramfs."
 readme = "README.md"
 requires-python = ">=3.9"

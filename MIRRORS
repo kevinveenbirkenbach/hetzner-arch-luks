@@ -1,0 +1,4 @@
+git@github.com:kevinveenbirkenbach/hetzner-arch-luks.git
+ssh://git@code.infinito.nexus:2201/kevinveenbirkenbach/hetzner-arch-luks.git
+ssh://git@git.veen.world:2201/kevinveenbirkenbach/hetzner-arch-luks.git
+https://pypi.org/project/hetzner-arch-luks/
