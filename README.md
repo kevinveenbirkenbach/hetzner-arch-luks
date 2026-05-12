@@ -71,12 +71,18 @@ The LUKS passphrase is prompted (hidden) on first use and cached in the libsecre
 Each section is a small handful of `hal` commands. Click into the corresponding
 table row above for what each one actually does.
 
+Set the server IP/hostname once per shell — every block below uses `$SERVER`:
+
+```bash
+export SERVER=your_server_ip   # e.g. 46.4.224.77 or boot.echoserver
+```
+
 ### 1. Install Arch via installimage
 
 ```bash
-hal connect rescue YOUR_SERVER_IP                       # verify rescue is up
-hal setup image YOUR_SERVER_IP --autosetup autosetup    # see autosetup.example
-hal connect rescue YOUR_SERVER_IP reboot
+hal connect rescue "$SERVER"                              # verify rescue is up
+hal setup image "$SERVER" --autosetup autosetup           # see autosetup.example
+hal connect rescue "$SERVER" reboot
 ```
 
 Tip: copy `autosetup.example` to `autosetup`, edit `DRIVE1`/`DRIVE2`/`HOSTNAME`,
@@ -85,9 +91,9 @@ then run `setup image`.
 ### 2. Boot Arch, install the dropbear stack
 
 ```bash
-hal connect server YOUR_SERVER_IP                       # verify SSH works
-hal connect server YOUR_SERVER_IP pacman -Syyu          # bring system current
-hal setup dropbear YOUR_SERVER_IP                       # dropbear + mkinitcpio plugins + HOOKS
+hal connect server "$SERVER"                              # verify SSH works
+hal connect server "$SERVER" pacman -Syyu                 # bring system current
+hal setup dropbear "$SERVER"                              # dropbear + mkinitcpio plugins + HOOKS
 ```
 
 ### 3. Convert root to LUKS
@@ -95,17 +101,17 @@ hal setup dropbear YOUR_SERVER_IP                       # dropbear + mkinitcpio 
 Activate Rescue in the Hetzner Robot UI, then:
 
 ```bash
-hal connect server YOUR_SERVER_IP reboot                # boots back into rescue
-hal connect rescue YOUR_SERVER_IP                       # verify rescue is up
-hal setup encrypt-root YOUR_SERVER_IP                   # LUKS conversion — DESTRUCTIVE
-hal setup grub YOUR_SERVER_IP                           # initial GRUB for LUKS boot
-hal fix static-ip YOUR_SERVER_IP                        # (recommended) harden initramfs network
+hal connect server "$SERVER" reboot                       # boots back into rescue
+hal connect rescue "$SERVER"                              # verify rescue is up
+hal setup encrypt-root "$SERVER"                          # LUKS conversion — DESTRUCTIVE
+hal setup grub "$SERVER"                                  # initial GRUB for LUKS boot
+hal fix static-ip "$SERVER"                               # static initramfs IP — Hetzner DHCP is fragile
 ```
 
 Deactivate Rescue in the Hetzner Robot UI, then:
 
 ```bash
-hal connect rescue YOUR_SERVER_IP reboot                # final reboot into encrypted system
+hal connect rescue "$SERVER" reboot                       # final reboot into encrypted system
 ```
 
 ### 4. Day-to-day use
@@ -114,9 +120,9 @@ After every reboot the system blocks at dropbear in initramfs waiting for the
 LUKS passphrase. From your client:
 
 ```bash
-hal status YOUR_SERVER_IP                               # wait for dropbear / sshd
-hal unlock YOUR_SERVER_IP                               # send passphrase to dropbear
-hal connect server YOUR_SERVER_IP                       # normal SSH after unlock
+hal status "$SERVER"                                      # wait for dropbear / sshd
+hal unlock "$SERVER"                                      # send passphrase to dropbear
+hal connect server "$SERVER"                              # normal SSH after unlock
 ```
 
 ### 5. Expand the root filesystem later
@@ -124,7 +130,7 @@ hal connect server YOUR_SERVER_IP                       # normal SSH after unloc
 If the autosetup gave you a small root LV and the rest is free LVM space:
 
 ```bash
-hal fix expand-fs YOUR_SERVER_IP
+hal fix expand-fs "$SERVER"
 ```
 
 ## Debugging an unresponsive server
@@ -133,20 +139,20 @@ The server isn't booting / SSH never comes up:
 
 ```bash
 # 1. Reach the server's chroot
-hal connect rescue YOUR_SERVER_IP                       # via Hetzner Robot → Rescue first
-hal diagnose YOUR_SERVER_IP | tee "diag-$(date +%F-%H%M).log"
+hal connect rescue "$SERVER"                              # via Hetzner Robot → Rescue first
+hal diagnose "$SERVER" | tee "diag-$(date +%F-%H%M).log"
 
 # 2. Apply best-guess fixes in roughly this order
-hal fix boot YOUR_SERVER_IP                             # sshd config + journald
-hal fix network YOUR_SERVER_IP                          # interface naming drift
-hal fix grub YOUR_SERVER_IP                             # stale MBR after grub upgrades
-hal fix static-ip YOUR_SERVER_IP                        # DHCP-in-initramfs fragility
+hal fix boot "$SERVER"                                    # sshd config + journald
+hal fix network "$SERVER"                                 # interface naming drift
+hal fix grub "$SERVER"                                    # stale MBR after grub upgrades
+hal fix static-ip "$SERVER"                               # DHCP-in-initramfs fragility
 
 # 3. Last-resort kernel rollback (if a kernel bump is the suspect)
-hal fix kernel YOUR_SERVER_IP
+hal fix kernel "$SERVER"
 
 # 4. Or, after fixing whatever was broken, upgrade everything cleanly
-hal fix upgrade YOUR_SERVER_IP
+hal fix upgrade "$SERVER"
 ```
 
 Every `hal` chroot command makes its own backups (`<file>.hal-backup`)
