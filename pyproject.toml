@@ -1,15 +1,19 @@
 [build-system]
-requires = ["setuptools>=64"]
+# 77+ for PEP 639 SPDX `license = "MIT"` + `license-files`.
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "hetzner-arch-luks"
 version = "0.1.0"
-description = "CLI helpers for the hetzner-arch-luks setup: connect to rescue, drop into the encrypted chroot, probe reachability, collect diagnostics."
+description = "End-to-end CLI (`hal`) for installing, encrypting, debugging and maintaining an Arch Linux server on Hetzner Dedicated hardware with software RAID, LUKS full-disk encryption, btrfs on LVM, and remote unlock via dropbear in the initramfs."
 readme = "README.md"
 requires-python = ">=3.9"
-authors = [{ name = "Kevin Veen-Birkenbach" }]
-license = { text = "Proprietary" }
+authors = [{ name = "Kevin Veen-Birkenbach", email = "kevin@veen.world" }]
+maintainers = [{ name = "Kevin Veen-Birkenbach", email = "kevin@veen.world" }]
+license = "MIT"
+license-files = ["LICENSE"]
+urls = { Homepage = "https://veen.world", Repository = "https://github.com/kevinveenbirkenbach/hetzner-arch-luks" }
 classifiers = [
   "Environment :: Console",
   "Operating System :: POSIX :: Linux",

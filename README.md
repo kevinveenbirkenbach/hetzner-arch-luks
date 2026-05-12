@@ -1,375 +1,158 @@
 # Arch Linux with LUKS and btrfs on a Hetzner server
 
-## Software
-This guide shows how to set up the following software composition:
-* [Arch Linux](https://www.archlinux.de/)
-* [btrfs](https://en.wikipedia.org/wiki/Btrfs)
-* [LUKS](https://wiki.archlinux.org/index.php/Dm-crypt)
+A small Python CLI (`hal`) that wraps every step of installing, encrypting, and
+maintaining an [Arch Linux](https://www.archlinux.de/) server on
+[Hetzner](https://www.hetzner.com/) Dedicated hardware with software RAID,
+[LUKS](https://wiki.archlinux.org/index.php/Dm-crypt) full-disk encryption,
+[btrfs](https://en.wikipedia.org/wiki/Btrfs) on top of LVM, and remote unlock
+via [dropbear](https://wiki.archlinux.org/title/Dm-crypt/Specialties#busybox-based_initramfs_(built_with_mkinitcpio))
+in the initramfs.
 
-## Requirements
-Written for a [Dedicated](https://de.wikipedia.org/wiki/Server#Dedizierte_Server) [Hetzner](https://www.hetzner.com/) server with the following hardware specifications:
-```
-CPU1: Intel(R) Core(TM) i7-2600 CPU @ 3.40GHz (Cores 8)
-Memory:  15973 MB
-Disk /dev/sda: 3000 GB (=> 2794 GiB)
-Disk /dev/sdb: 3000 GB (=> 2794 GiB)
-Total capacity 5589 GiB with 2 Disks
-```
+**Author:** Kevin Veen-Birkenbach &lt;[kevin@veen.world](mailto:kevin@veen.world)&gt; — [veen.world](https://veen.world)  
+**License:** MIT — see [LICENSE](./LICENSE)
 
-## Legend
-The following symbols show in which environment the code is executed:
-* :computer: Client
-* :ambulance: [Hetzner Rescue System](https://wiki.hetzner.de/index.php/Hetzner_Rescue-System/en)
-* :ghost: Chroot from Rescue System into Arch
-* :minidisc: Arch OS
-
-## CLI helper (`hal`)
-This repo ships a small Python CLI (`hal`) that wraps the recurring SSH / LUKS / chroot dances. Install it once on your client:
+## Install the CLI
 
 ```bash
-pip install --user -e .
+make install   # → pip install --user -e .
+hal --help
 ```
 
-After that, `hal` is on your `$PATH`. Subcommands used throughout the guide:
+After install, every step below is a single `hal` subcommand.
+
+## Subcommand reference
+
+Run `hal --help`, `hal <group> --help`, or `hal <group> <target> --help` for the live reference.
+
+### Top-level
 
 | Command | What it does |
 |---|---|
-| `hal status <host>` | Probe reachability (ping, ports 22/222, SSH banner). No login. |
-| `hal connect rescue <host>` | Wait for rescue, drop known_hosts entry, SSH in as root. |
-| `hal connect chroot <host>` | Prompt LUKS passphrase **first** (hidden), then via rescue: assemble RAID → unlock LUKS → mount → drop into `chroot /mnt /bin/bash`. |
-| `hal diagnose <host>` | Same setup as `connect chroot`, then runs a fixed diagnostic script inside the chroot and prints the report to stdout. |
+| `hal status <host>` | Ping + port scan + SSH banner. No login. |
+| `hal diagnose <host>` | Rescue → chroot, runs a fixed inspection script. Pipe with `tee` to save. |
+| `hal unlock <host>` | Send the LUKS passphrase from the keyring to dropbear (`cryptroot-unlock`). |
+| `hal forget <host>` | Clear the cached LUKS passphrase from libsecret. |
 
-The passphrase prompt happens *before* the SSH connection is established, so you can type it once, walk away, and the rest runs unattended.
+### `hal connect <target> <host> [cmd]`
 
-## Guide
-### 1. Configure and Install Image
-#### 1.1 Login to Hetzner Rescue System
-:computer: :
-```bash
-hal connect rescue your_server_ip
-```
-#### 1.2 Create the /autosetup
+Open a shell, or run `cmd` non-interactively.
 
-:ambulance: :
+| Target | Where it goes |
+|---|---|
+| `rescue` | Hetzner Rescue OS |
+| `server` | Booted Arch system |
+| `chroot` | Rescue → chroot of installed Arch (LUKS-unlocks + mounts first) |
 
-```bash
-nano /autosetup
-```
+### `hal setup <target> <host>` — one-time install operations
 
-Save the following content into this file:
+| Target | What it does |
+|---|---|
+| `image --autosetup PATH` | In rescue: upload autosetup, run `installimage`. **Destructive.** |
+| `dropbear` | Booted Arch: install dropbear + mkinitcpio plugins, copy authorized_keys, patch HOOKS. |
+| `grub` | Rescue → chroot: install grub package, write LUKS-aware `/etc/default/grub`, grub-install on every boot disk. |
+| `encrypt-root` | Rescue: LUKS-encrypt `/dev/md1`, preserve data via `/oldroot` copy. **Destructive on `/dev/md1`. Confirms before format.** |
 
-```
-##  Hetzner Online GmbH - installimage - config
+### `hal fix <target> <host>` — recovery + maintenance operations
 
-DRIVE1 /dev/sda
-DRIVE2 /dev/sdb
+| Target | What it does |
+|---|---|
+| `boot` | Patch `PermitRootLogin`, enable persistent journald. |
+| `network` | Rewrite `.network` files to match by MACAddress= instead of interface name. |
+| `grub` | Refresh Stage1 + core.img in MBR (Arch doesn't do this automatically after grub upgrades). |
+| `kernel` | Roll the `linux` package back to the previous version (cache or archive.archlinux.org). |
+| `static-ip` | Replace `ip=dhcp` in `/etc/default/grub` with a static cmdline IP derived from `/etc/systemd/network/*.network`. |
+| `upgrade` | Full `pacman -Syyu` + initramfs rebuild + grub-install on every boot disk. |
+| `expand-fs` | On booted Arch: `lvresize -l +100%FREE /dev/vg0/root && btrfs filesystem resize max /`. |
 
-##  SOFTWARE RAID:
-## activate software RAID?  < 0 | 1 >
-SWRAID 1
+The LUKS passphrase is prompted (hidden) on first use and cached in the libsecret keyring per host — subsequent runs against the same host don't prompt.
 
-## Choose the level for the software RAID < 0 | 1 | 10 >
-SWRAIDLEVEL 1
+## Setup flow
 
-##  BOOTLOADER:
-BOOTLOADER grub
+Each section is a small handful of `hal` commands. Click into the corresponding
+table row above for what each one actually does.
 
-##  HOSTNAME:
-HOSTNAME hetzner-arch-luks
-#Adapt the hostname to your needs
-
-##  PARTITIONS / FILESYSTEMS:
-PART /boot  btrfs     512M
-PART lvm    vg0       all
-LV vg0   swap   swap     swap         8G
-LV vg0   root   /        btrfs        10G
-
-##  OPERATING SYSTEM IMAGE:
-IMAGE /root/.oldroot/nfs/install/../images/archlinux-latest-64-minimal.tar.gz
-```
-#### 1.3 Install Image
-:ambulance: :
-```bash
-installimage
-```
-#### 1.4 Restart
-:ambulance: :
-```bash
-reboot
-```
-
-### 2. Setup System
-#### 2.1 Login to server
-:computer: :
-```bash
-ssh-keygen -f "$HOME/.ssh/known_hosts" -R your_server_ip
-ssh root@your_server_ip
-```
-#### 2.2 Update the system
-:minidisc: :
-```bash
-pacman -Syyu
-```
-#### 2.3 Install administration tools:
-:minidisc: :
-```bash
-pacman -S nano
-```
-
-### 3. Prepare System for Unlocking via SSH
-#### 3.1 Install software
-:minidisc: :
-```bash
-pacman -S busybox mkinitcpio-dropbear mkinitcpio-utils mkinitcpio-netconf
-```
-#### 3.2 Copy authorized keys to dropbear
-:minidisc: :
-```bash
-cp -v ~/.ssh/authorized_keys /etc/dropbear/root_key
-```
+### 1. Install Arch via installimage
 
 ```bash
-chmod 700 ~/.ssh
-chmod 600 ~/.ssh/authorized_keys
-systemctl enable sshd
+hal connect rescue YOUR_SERVER_IP                       # verify rescue is up
+hal setup image YOUR_SERVER_IP --autosetup autosetup    # see autosetup.example
+hal connect rescue YOUR_SERVER_IP reboot
 ```
 
-#### 3.3 Regenerate OpenSSH keys
-:minidisc: :
-```bash
-rm /etc/ssh/ssh_host_*
-ssh-keygen -A -m PEM
-```
-#### 3.4 Import SSH-keys to dropbear
-:minidisc: :
-```bash
-dropbearconvert openssh dropbear /etc/ssh/ssh_host_rsa_key /etc/dropbear/dropbear_rsa_host_key
-```
+Tip: copy `autosetup.example` to `autosetup`, edit `DRIVE1`/`DRIVE2`/`HOSTNAME`,
+then run `setup image`.
 
-#### 3.5 Modify /etc/mkinitcpio.conf
-:minidisc: :
-```bash
-nano /etc/mkinitcpio.conf
-```
-##### Replace
-**Old:**
-```
-HOOKS=(base udev autodetect modconf block mdadm_udev lvm2 filesystems keyboard fsck)
-```
-**New:**
-```
-HOOKS=(base udev autodetect modconf block mdadm_udev lvm2 netconf dropbear encryptssh filesystems keyboard fsck)
-```
-
-### 4. Activate Encryption
-#### 4.1 Activate Rescue System
-Activate the rescue system https://robot.your-server.de/server
-#### 4.2 Reboot
-:minidisc: :
-```bash
-reboot
-```
-#### 4.3 Login to the rescue system
-:computer: :
-```bash
-hal connect rescue your_server_ip
-```
-
-#### 4.4 Mount the "system"
-:ambulance: :
-```bash
-vgscan -v
-vgchange -a y
-mount /dev/mapper/vg0-root /mnt
-```
-
-#### 4.5 Copy "system"
-:ambulance: :
-```bash
-echo 0 >/proc/sys/dev/raid/speed_limit_max
-mkdir /oldroot
-cp -va /mnt/. /oldroot/.
-echo 200000 >/proc/sys/dev/raid/speed_limit_max
-```
-#### 4.6 Unmount the "system"
-:ambulance: :
-```bash
-umount /mnt
-```
-
-#### 4.7 Delete decrypted LVM-Volume-Group
-:ambulance: :
-```bash
-vgremove vg0
-```
-
-#### 4.8 Check drive state
-:ambulance: :
-```bash
-cat /proc/mdstat
-```
-#### 4.9 Encrypt MD1 by executing
-:ambulance: :
-```bash
-cryptsetup --cipher aes-xts-plain64 --key-size 256 --hash sha256 --iter-time=10000 luksFormat /dev/md1
-cryptsetup luksOpen /dev/md1 cryptroot
-pvcreate /dev/mapper/cryptroot
-vgcreate vg0 /dev/mapper/cryptroot
-lvcreate -n swap -L8G vg0
-lvcreate -n root -L10G vg0
-mkfs.btrfs /dev/vg0/root
-mkswap /dev/vg0/swap
-```
-
-#### 4.10 Mount encrypted
-:ambulance: :
-```bash
-mount /dev/vg0/root /mnt
-```
-
-#### 4.12 Copy "system"
-:ambulance: :
-```bash
-echo 0 >/proc/sys/dev/raid/speed_limit_max
-cp -av /oldroot/. /mnt/.
-echo 200000 >/proc/sys/dev/raid/speed_limit_max
-```
-
-#### 4.13 Integrate Finale Installation
-:ambulance: :
-```bash
-mount /dev/md0 /mnt/boot
-mount --bind /dev /mnt/dev
-mount --bind /sys /mnt/sys
-mount --bind /proc /mnt/proc
-chroot /mnt
-```
-
-#### 4.14
-:ghost: :
-```bash
-echo "cryptroot /dev/md1 none luks" >> /etc/crypttab
-```
-
-#### 4.15  Create an initial ramdisk
-:ghost: :
-```bash
-mkinitcpio -p linux
-```
-
-### 5 Grub
-#### 5.1 Install Grub
-:ghost: :
-```bash
-pacman -S grub
-```
-#### 5.2 Configure /etc/default/grub
-
-:ghost: :
+### 2. Boot Arch, install the dropbear stack
 
 ```bash
-nano /etc/default/grub
+hal connect server YOUR_SERVER_IP                       # verify SSH works
+hal connect server YOUR_SERVER_IP pacman -Syyu          # bring system current
+hal setup dropbear YOUR_SERVER_IP                       # dropbear + mkinitcpio plugins + HOOKS
 ```
 
-Change the following parameters:
+### 3. Convert root to LUKS
+
+Activate Rescue in the Hetzner Robot UI, then:
+
 ```bash
-GRUB_CMDLINE_LINUX="cryptdevice=/dev/md1:cryptroot ip=dhcp"
-GRUB_ENABLE_CRYPTODISK=y
-```
-:information_source: Further [information](https://wiki.archlinux.org/index.php/Dm-crypt/Encrypting_an_entire_system#Configuring_GRUB).
-#### 5.3 Make and Install on Hard-drives
-:ghost: :
-```bash
-grub-mkconfig -o /boot/grub/grub.cfg
-grub-install /dev/sda
-grub-install /dev/sdb
+hal connect server YOUR_SERVER_IP reboot                # boots back into rescue
+hal connect rescue YOUR_SERVER_IP                       # verify rescue is up
+hal setup encrypt-root YOUR_SERVER_IP                   # LUKS conversion — DESTRUCTIVE
+hal setup grub YOUR_SERVER_IP                           # initial GRUB for LUKS boot
+hal fix static-ip YOUR_SERVER_IP                        # (recommended) harden initramfs network
 ```
 
-#### 5.4 Restart System
-:ghost: :ambulance: :
+Deactivate Rescue in the Hetzner Robot UI, then:
+
 ```bash
-exit
-umount /mnt/boot /mnt/proc /mnt/sys /mnt/dev
-umount /mnt
-sync
-reboot
-```
-### 6. Encryption Procedure
-#### 6.1 Decrypt server
-:computer: :
-```bash
-ssh  -o UserKnownHostsFile=/dev/null root@your_server_ip
-cryptroot-unlock
-exit
-```
-#### 6.2 Login to server
-:computer: :
-```bash
-ssh-keygen -f "$HOME/.ssh/known_hosts" -R your_server_ip
-ssh root@your_server_ip
+hal connect rescue YOUR_SERVER_IP reboot                # final reboot into encrypted system
 ```
 
-#### 7. Expand filesystem
-:computer: :
+### 4. Day-to-day use
+
+After every reboot the system blocks at dropbear in initramfs waiting for the
+LUKS passphrase. From your client:
+
 ```bash
-lvresize -l +100%FREE /dev/vg0/root
-btrfs filesystem resize max /
+hal status YOUR_SERVER_IP                               # wait for dropbear / sshd
+hal unlock YOUR_SERVER_IP                               # send passphrase to dropbear
+hal connect server YOUR_SERVER_IP                       # normal SSH after unlock
 ```
 
-## 8. Debugging
-### 8.1 Login to System from Rescue System
-With the rescue system already activated and running, drop straight into the chroot from your client:
+### 5. Expand the root filesystem later
 
-:computer: :
+If the autosetup gave you a small root LV and the rest is free LVM space:
+
 ```bash
-hal connect chroot your_server_ip
-```
-You'll be prompted for the LUKS passphrase first (hidden input). The CLI then waits for rescue, assembles the RAID, opens LUKS, activates LVM, mounts `/mnt` + `/mnt/boot` + the pseudo-filesystems, and drops you into `chroot /mnt /bin/bash`. Idempotent — re-running while already mounted just re-enters the chroot.
-
-### 8.2 Collect diagnostics in one shot
-If you want a non-interactive snapshot of the installed system's state (package versions, last-boot journal errors, sshd status, `/boot` contents, etc.):
-
-:computer: :
-```bash
-hal diagnose your_server_ip | tee "diagnose-$(date +%F-%H%M).log"
-```
-The CLI runs the same setup as `connect chroot` and then a fixed inspection script inside the chroot. Output goes to stdout (and the log file via `tee`).
-
-<details>
-<summary>Manual equivalent of the unlock + mount sequence</summary>
-
-:ambulance: :
-```bash
-cryptsetup luksOpen /dev/md1 cryptroot
-mount /dev/vg0/root /mnt
-mount /dev/md0 /mnt/boot
-mount --bind /dev /mnt/dev
-mount --bind /sys /mnt/sys
-mount --bind /proc /mnt/proc
-chroot /mnt
-```
-</details>
-### 8.3 Logout from chroot environment
-:ghost: :ambulance: :
-```bash
-exit
-umount /mnt/boot /mnt/proc /mnt/sys /mnt/dev
-umount /mnt
-sync
-reboot
+hal fix expand-fs YOUR_SERVER_IP
 ```
 
-### 8.4 Regenerate GRUB and Arch
-:ghost: :
+## Debugging an unresponsive server
+
+The server isn't booting / SSH never comes up:
+
 ```bash
-mkinitcpio -p linux
-grub-mkconfig -o /boot/grub/grub.cfg
-grub-install /dev/sda
-grub-install /dev/sdb
+# 1. Reach the server's chroot
+hal connect rescue YOUR_SERVER_IP                       # via Hetzner Robot → Rescue first
+hal diagnose YOUR_SERVER_IP | tee "diag-$(date +%F-%H%M).log"
+
+# 2. Apply best-guess fixes in roughly this order
+hal fix boot YOUR_SERVER_IP                             # sshd config + journald
+hal fix network YOUR_SERVER_IP                          # interface naming drift
+hal fix grub YOUR_SERVER_IP                             # stale MBR after grub upgrades
+hal fix static-ip YOUR_SERVER_IP                        # DHCP-in-initramfs fragility
+
+# 3. Last-resort kernel rollback (if a kernel bump is the suspect)
+hal fix kernel YOUR_SERVER_IP
+
+# 4. Or, after fixing whatever was broken, upgrade everything cleanly
+hal fix upgrade YOUR_SERVER_IP
 ```
+
+Every `hal` chroot command makes its own backups (`<file>.hal-backup`)
+before mutating anything, so individual fixes can be reverted by hand.
 
 ## Sources
-The code is adapted from the following guides:
 
 * http://daemons-point.com/blog/2019/10/20/hetzner-verschluesselt/
 * https://www.howtoforge.com/using-the-btrfs-filesystem-with-raid1-with-ubuntu-12.10-on-a-hetzner-server

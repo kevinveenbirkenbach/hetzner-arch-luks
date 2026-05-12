@@ -181,22 +181,32 @@ def _setup(ssh: SshSession, host: str, passphrase: str | None) -> None:
 # ---- public entry points (called by cli.py) --------------------------------
 
 
-def connect_rescue(host: str, *, command: list[str] | None = None) -> int:
-    """Wait for rescue to come up, then either open an interactive SSH shell
-    or run `command` non-interactively and print its output.
-
-    No passphrase prompt — rescue itself isn't encrypted.
+def _connect_simple(host: str, label: str, command: list[str] | None) -> int:
+    """Shared body of `connect_rescue` and `connect_server` — wait for SSH,
+    then either drop into an interactive shell or run `command` and print.
     """
     _wait_rescue(host)
     with SshSession(host) as ssh:
         if command:
             cmd_str = " ".join(shlex.quote(c) for c in command)
-            print(f"==> Running on rescue: {cmd_str}")
+            print(f"==> Running on {label}: {cmd_str}")
             ssh.run(cmd_str, check=False)
         else:
-            print("==> Connected to rescue. Type 'exit' to leave.")
+            print(f"==> Connected to {label}. Type 'exit' to leave.")
             ssh.run("exec bash -l", tty=True, check=False)
     return 0
+
+
+def connect_rescue(host: str, *, command: list[str] | None = None) -> int:
+    """Wait for rescue to come up, then open a shell or run `command`."""
+    return _connect_simple(host, "rescue", command)
+
+
+def connect_server(host: str, *, command: list[str] | None = None) -> int:
+    """Wait for the booted Arch system to come up, then open a shell or
+    run `command`. Same SSH plumbing as `connect_rescue`; named differently
+    for clarity in the docs."""
+    return _connect_simple(host, "server", command)
 
 
 def connect_chroot(
@@ -250,11 +260,6 @@ def reinstall_grub(host: str, *, ask_passphrase: bool = True) -> int:
     return _run_chroot_script(host, "fix/grub.sh", "reinstall-grub", ask_passphrase)
 
 
-def downgrade_initramfs(host: str, *, ask_passphrase: bool = True) -> int:
-    """Downgrade mkinitcpio+dropbear+cryptsetup+mdadm+lvm2, rebuild initramfs. MUTATES."""
-    return _run_chroot_script(host, "fix/initramfs.sh", "downgrade-initramfs", ask_passphrase)
-
-
 def use_static_ip(host: str, *, ask_passphrase: bool = True) -> int:
     """Replace ip=dhcp in /etc/default/grub with a static spec parsed from
     the existing systemd-networkd .network file. Regenerates grub.cfg. MUTATES."""
@@ -266,6 +271,111 @@ def upgrade_system(host: str, *, ask_passphrase: bool = True) -> int:
     (config + MBR on all boot disks). Uses --disable-sandbox because the
     Hetzner Rescue kernel lacks Landlock. MUTATES."""
     return _run_chroot_script(host, "maintain/upgrade.sh", "upgrade-system", ask_passphrase)
+
+
+def unlock(host: str, *, ask_passphrase: bool = True) -> int:
+    """Pipe the LUKS passphrase to `cryptroot-unlock` on the dropbear that
+    is listening from initramfs. Use after a reboot, before the main sshd
+    is reachable. Uses a throwaway known_hosts to avoid host-key conflicts
+    between the dropbear and the real sshd (different host keys, same port).
+    """
+    passphrase = _prompt_passphrase(host) if ask_passphrase else None
+    if passphrase is None:
+        print("Need a passphrase to send to cryptroot-unlock.", file=sys.stderr)
+        return 1
+    _wait_rescue(host)  # really just "wait for port 22"
+    print(f"==> Sending passphrase to dropbear on {host} ...")
+    cmd = [
+        "ssh",
+        "-o", "UserKnownHostsFile=/dev/null",
+        "-o", "StrictHostKeyChecking=accept-new",
+        "-o", "GlobalKnownHostsFile=/dev/null",
+        "-o", "ConnectTimeout=10",
+        f"root@{host}",
+        "cryptroot-unlock",
+    ]
+    r = subprocess.run(cmd, input=(passphrase + "\n").encode(), check=False)
+    if r.returncode == 0:
+        print("==> Passphrase accepted; system continues boot.")
+    else:
+        print(f"==> ssh/cryptroot-unlock exited with code {r.returncode}",
+              file=sys.stderr)
+    return r.returncode
+
+
+def expand_fs(host: str) -> int:
+    """Run `lvresize -l +100%FREE /dev/vg0/root && btrfs filesystem resize max /`
+    on the booted system. No LUKS passphrase needed — server is already up."""
+    _wait_rescue(host)
+    with SshSession(host) as ssh:
+        print("==> Expanding LVM root + btrfs filesystem ...")
+        ssh.run("lvresize -l +100%FREE /dev/vg0/root && btrfs filesystem resize max /")
+    return 0
+
+
+def setup_dropbear(host: str) -> int:
+    """Install dropbear + supporting packages, configure SSH keys, patch
+    /etc/mkinitcpio.conf HOOKS. Runs on the booted system. MUTATES."""
+    inside = (
+        importlib.resources
+        .files("hetzner_arch_luks")
+        .joinpath("resources/setup/dropbear.sh")
+        .read_bytes()
+    )
+    _wait_rescue(host)
+    with SshSession(host) as ssh:
+        print("==> Running setup-dropbear on the booted system ...")
+        ssh.run("bash -s", input_=inside)
+    return 0
+
+
+def install_grub(host: str, *, ask_passphrase: bool = True) -> int:
+    """Inside chroot: install grub package, write /etc/default/grub for
+    LUKS-encrypted root, grub-install on every boot disk, grub-mkconfig.
+    Used during the initial encryption setup. MUTATES."""
+    return _run_chroot_script(host, "setup/grub.sh", "install-grub", ask_passphrase)
+
+
+def install_image(host: str, autosetup_path: str) -> int:
+    """Upload an autosetup config to the rescue and run `installimage`.
+    DESTRUCTIVE — formats the disks per the autosetup contents."""
+    import pathlib
+    p = pathlib.Path(autosetup_path)
+    if not p.exists():
+        print(f"autosetup file not found: {autosetup_path}", file=sys.stderr)
+        return 1
+    content = p.read_bytes()
+    _wait_rescue(host)
+    with SshSession(host) as ssh:
+        print(f"==> Uploading {autosetup_path} → /autosetup on rescue ...")
+        ssh.run("cat > /autosetup", input_=content)
+        print("==> Running installimage (DESTRUCTIVE — this formats the disks!)")
+        ssh.run("installimage", tty=True)
+    return 0
+
+
+def encrypt_root(host: str) -> int:
+    """In rescue (NOT chroot): re-format /dev/md1 with LUKS, preserve the
+    installed root by copying through /oldroot, then mkinitcpio inside chroot.
+
+    Interactive: cryptsetup prompts for the new LUKS passphrase via the rescue
+    TTY. We upload the script to /root/_encrypt_root.sh and execute it with
+    a TTY allocated so cryptsetup's prompts work. DESTRUCTIVE on /dev/md1."""
+    content = (
+        importlib.resources
+        .files("hetzner_arch_luks")
+        .joinpath("resources/setup/encrypt_root.sh")
+        .read_bytes()
+    )
+    _wait_rescue(host)
+    with SshSession(host) as ssh:
+        print("==> Uploading encrypt-root script to rescue:/root/_encrypt_root.sh")
+        ssh.run("cat > /root/_encrypt_root.sh && chmod +x /root/_encrypt_root.sh",
+                input_=content)
+        print("==> Running encrypt-root (interactive — answer cryptsetup prompts)")
+        ssh.run("/root/_encrypt_root.sh", tty=True, check=False)
+        ssh.run("rm -f /root/_encrypt_root.sh", check=False)
+    return 0
 
 
 def forget_passphrase(host: str) -> int:

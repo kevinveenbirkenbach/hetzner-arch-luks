@@ -1,0 +1,31 @@
+##  Hetzner Online GmbH - installimage - config
+##  Copy to a working file, adjust DRIVE / HOSTNAME / sizes to your box,
+##  then upload via:  hal install-image <host> --autosetup <path>
+
+## Adjust DRIVE1 / DRIVE2 to your actual disks. Typical values:
+##   - /dev/sda /dev/sdb     (SATA/SAS auction boxes)
+##   - /dev/nvme0n1 /dev/nvme1n1  (NVMe-based servers)
+DRIVE1 /dev/sda
+DRIVE2 /dev/sdb
+
+##  SOFTWARE RAID:
+##  activate software RAID?  < 0 | 1 >
+SWRAID 1
+##  Choose the level for the software RAID < 0 | 1 | 10 >
+SWRAIDLEVEL 1
+
+##  BOOTLOADER:
+BOOTLOADER grub
+
+##  HOSTNAME:  adapt to your needs
+HOSTNAME hetzner-arch-luks
+
+##  PARTITIONS / FILESYSTEMS:
+##  /boot must be its own partition (btrfs/ext4); root and swap on LVM.
+PART /boot  btrfs     512M
+PART lvm    vg0       all
+LV vg0   swap   swap     swap         8G
+LV vg0   root   /        btrfs        10G
+
+##  OPERATING SYSTEM IMAGE:
+IMAGE /root/.oldroot/nfs/install/../images/archlinux-latest-64-minimal.tar.gz

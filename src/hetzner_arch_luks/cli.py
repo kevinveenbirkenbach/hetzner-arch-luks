@@ -1,209 +1,288 @@
 """Command-line interface for the hetzner-arch-luks helpers.
 
-Entry point:  hal <subcommand> <host>
+Top-level structure:
 
-Subcommands:
-    status                  client-side reachability probe (no login)
-    connect rescue <host>   SSH into the rescue system
-    connect chroot <host>   LUKS unlock + mount + interactive chroot shell
-    diagnose <host>         LUKS unlock + mount + collect diagnostics
+    hal status HOST
+    hal diagnose HOST
+    hal unlock HOST
+    hal forget HOST
 
-For commands that need the LUKS passphrase, the prompt happens *first*, before
-any network IO — so you can type the passphrase, walk away, and the rest runs
-unattended.
+    hal connect {rescue,chroot,server} HOST [CMD...]
+    hal setup   {image,dropbear,grub,encrypt-root} HOST [...]
+    hal fix     {boot,network,grub,kernel,static-ip,upgrade,expand-fs} HOST
+
+For commands that need the LUKS passphrase, the prompt happens *first*,
+before any network IO. The passphrase is cached per-host in the libsecret
+keyring so subsequent runs against the same host don't prompt.
 """
 from __future__ import annotations
 
 import argparse
 import sys
 
-from . import probe, remote
+from . import __version__, probe, remote
+
+_AUTHOR = "Kevin Veen-Birkenbach <kevin@veen.world>"
+_HOMEPAGE = "https://veen.world"
+
+
+def _add_passphrase_flag(p: argparse.ArgumentParser) -> None:
+    p.add_argument(
+        "--no-passphrase-prompt",
+        action="store_true",
+        help="Skip the early LUKS prompt (use when LUKS is already open from a prior run).",
+    )
+
+
+def _add_host(p: argparse.ArgumentParser) -> None:
+    p.add_argument("host")
 
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="hal",
-        description="Helper CLI for the hetzner-arch-luks workflow.",
+        description=(
+            "End-to-end CLI for installing, encrypting, debugging and maintaining "
+            "an Arch Linux server on Hetzner Dedicated hardware with software RAID, "
+            "LUKS full-disk encryption, btrfs on LVM, and remote unlock via dropbear "
+            "in the initramfs."
+        ),
+        epilog=f"Author: {_AUTHOR} — {_HOMEPAGE}    License: MIT",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    sub = parser.add_subparsers(dest="cmd", required=True)
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=(
+            f"hal {__version__}\n"
+            f"Author:   {_AUTHOR}\n"
+            f"Homepage: {_HOMEPAGE}\n"
+            f"License:  MIT"
+        ),
+    )
 
-    p_status = sub.add_parser(
+    sub = parser.add_subparsers(dest="cmd", required=True, metavar="COMMAND")
+
+    # -------------------- Top-level commands --------------------
+
+    p = sub.add_parser(
         "status",
         help="Probe reachability of a host (ping + ports + SSH banner). No login.",
     )
-    p_status.add_argument("host")
+    _add_host(p)
+
+    p = sub.add_parser(
+        "diagnose",
+        help="Collect a fixed inspection report from inside the installed system via rescue.",
+    )
+    _add_host(p)
+    _add_passphrase_flag(p)
+
+    p = sub.add_parser(
+        "unlock",
+        help="Send the LUKS passphrase from the keyring to dropbear (cryptroot-unlock). Use after a reboot.",
+    )
+    _add_host(p)
+    _add_passphrase_flag(p)
+
+    p = sub.add_parser(
+        "forget",
+        help="Drop the cached LUKS passphrase for a host from the libsecret keyring.",
+    )
+    _add_host(p)
+
+    # -------------------- `connect` group --------------------
 
     p_connect = sub.add_parser(
         "connect",
-        help="Open an interactive remote shell.",
+        help="Open a remote shell on rescue / chroot / server, or run a one-off command there.",
     )
-    p_connect_sub = p_connect.add_subparsers(dest="target", required=True)
+    p_connect_sub = p_connect.add_subparsers(
+        dest="target", required=True, metavar="TARGET"
+    )
 
-    p_rescue = p_connect_sub.add_parser(
+    p = p_connect_sub.add_parser(
         "rescue",
-        help="SSH into the Hetzner rescue system (waits for port 22 to come up). "
-             "Pass extra args after the host to run them non-interactively.",
+        help="SSH into the Hetzner rescue system. Append a command for non-interactive use.",
     )
-    p_rescue.add_argument("host")
-    p_rescue.add_argument(
-        "command",
-        nargs=argparse.REMAINDER,
-        help="Optional command + args to run on the rescue instead of opening "
-             "an interactive shell. Example: hal connect rescue HOST reboot",
+    _add_host(p)
+    p.add_argument(
+        "command", nargs=argparse.REMAINDER,
+        help="Optional command + args to run on the rescue instead of an interactive shell.",
     )
 
-    p_chroot = p_connect_sub.add_parser(
+    p = p_connect_sub.add_parser(
         "chroot",
-        help="Unlock LUKS via rescue, mount, and drop into chroot /mnt /bin/bash. "
-             "Pass extra args after the host to run them inside the chroot.",
+        help="Unlock LUKS via rescue, mount, and drop into `chroot /mnt /bin/bash`. Append a command for non-interactive use.",
     )
-    p_chroot.add_argument("host")
-    p_chroot.add_argument(
-        "--no-passphrase-prompt",
-        action="store_true",
-        help="Skip the early LUKS prompt (use when LUKS is already open from a prior run).",
-    )
-    p_chroot.add_argument(
-        "command",
-        nargs=argparse.REMAINDER,
-        help="Optional command + args to run inside the chroot instead of "
-             "opening an interactive shell. Example: hal connect chroot HOST pacman -Q linux",
+    _add_host(p)
+    _add_passphrase_flag(p)
+    p.add_argument(
+        "command", nargs=argparse.REMAINDER,
+        help="Optional command + args to run inside the chroot instead of an interactive shell.",
     )
 
-    p_diag = sub.add_parser(
-        "diagnose",
-        help="Collect diagnostics from inside the installed system via rescue.",
+    p = p_connect_sub.add_parser(
+        "server",
+        help="SSH into the booted Arch system. Append a command for non-interactive use.",
     )
-    p_diag.add_argument("host")
-    p_diag.add_argument(
-        "--no-passphrase-prompt",
-        action="store_true",
-        help="Skip the early LUKS prompt (use when LUKS is already open from a prior run).",
+    _add_host(p)
+    p.add_argument(
+        "command", nargs=argparse.REMAINDER,
+        help="Optional command + args to run on the server instead of an interactive shell.",
     )
+
+    # -------------------- `setup` group (one-time install) --------------------
+
+    p_setup = sub.add_parser(
+        "setup",
+        help="One-time install operations: image / dropbear / grub / encrypt-root.",
+    )
+    p_setup_sub = p_setup.add_subparsers(
+        dest="target", required=True, metavar="TARGET"
+    )
+
+    p = p_setup_sub.add_parser(
+        "image",
+        help="In rescue: upload an autosetup file and run `installimage`. DESTRUCTIVE.",
+    )
+    _add_host(p)
+    p.add_argument(
+        "--autosetup", required=True,
+        help="Path to a local autosetup config file (uploaded to /autosetup on rescue).",
+    )
+
+    p = p_setup_sub.add_parser(
+        "dropbear",
+        help="On the booted system: install dropbear + mkinitcpio plugins, copy authorized_keys, patch HOOKS. MUTATES.",
+    )
+    _add_host(p)
+
+    p = p_setup_sub.add_parser(
+        "grub",
+        help="In chroot (initial install): install grub package, write LUKS-aware /etc/default/grub, grub-install on every boot disk. MUTATES.",
+    )
+    _add_host(p)
+    _add_passphrase_flag(p)
+
+    p = p_setup_sub.add_parser(
+        "encrypt-root",
+        help="In rescue: full LUKS conversion of an installed Arch (sections 4.4–4.15). DESTRUCTIVE — confirms before format.",
+    )
+    _add_host(p)
+
+    # -------------------- `fix` group (recovery operations) --------------------
 
     p_fix = sub.add_parser(
-        "fix-boot",
-        help="Apply boot/SSH fixes inside the chroot. MUTATES the installed system.",
+        "fix",
+        help="Recovery + maintenance operations: boot / network / grub / kernel / static-ip / upgrade / expand-fs.",
     )
-    p_fix.add_argument("host")
-    p_fix.add_argument(
-        "--no-passphrase-prompt",
-        action="store_true",
-        help="Skip the early LUKS prompt (use when LUKS is already open from a prior run).",
+    p_fix_sub = p_fix.add_subparsers(
+        dest="target", required=True, metavar="TARGET"
     )
 
-    p_fixnet = sub.add_parser(
-        "fix-network",
-        help="Rewrite systemd-networkd .network files to use MACAddress= match. MUTATES.",
+    p = p_fix_sub.add_parser(
+        "boot",
+        help="In chroot: patch PermitRootLogin to prohibit-password, enable persistent journald. MUTATES.",
     )
-    p_fixnet.add_argument("host")
-    p_fixnet.add_argument(
-        "--no-passphrase-prompt",
-        action="store_true",
-        help="Skip the early LUKS prompt (use when LUKS is already open from a prior run).",
-    )
+    _add_host(p)
+    _add_passphrase_flag(p)
 
-    p_dk = sub.add_parser(
-        "downgrade-kernel",
-        help="Roll the linux package back to the previous cached version. MUTATES. "
-             "Use after a kernel-bump pacman -Syu made the system unbootable.",
+    p = p_fix_sub.add_parser(
+        "network",
+        help="In chroot: rewrite /etc/systemd/network/*.network to match by MACAddress= instead of interface name. MUTATES.",
     )
-    p_dk.add_argument("host")
-    p_dk.add_argument(
-        "--no-passphrase-prompt",
-        action="store_true",
-        help="Skip the early LUKS prompt (use when LUKS is already open from a prior run).",
-    )
+    _add_host(p)
+    _add_passphrase_flag(p)
 
-    p_fp = sub.add_parser(
-        "forget-passphrase",
-        help="Drop the cached LUKS passphrase for a host from the libsecret keyring.",
+    p = p_fix_sub.add_parser(
+        "grub",
+        help="In chroot: re-run grub-install on every disk backing /boot. MUTATES the MBR.",
     )
-    p_fp.add_argument("host")
+    _add_host(p)
+    _add_passphrase_flag(p)
 
-    p_rg = sub.add_parser(
-        "reinstall-grub",
-        help="Re-run grub-install on every disk backing /boot. MUTATES the MBR. "
-             "Use after a grub-package upgrade that didn't refresh the bootloader.",
+    p = p_fix_sub.add_parser(
+        "kernel",
+        help="In chroot: roll the `linux` package back to the previous version (cache or archive.archlinux.org). MUTATES.",
     )
-    p_rg.add_argument("host")
-    p_rg.add_argument(
-        "--no-passphrase-prompt",
-        action="store_true",
-        help="Skip the early LUKS prompt (use when LUKS is already open from a prior run).",
-    )
+    _add_host(p)
+    _add_passphrase_flag(p)
 
-    p_di = sub.add_parser(
-        "downgrade-initramfs",
-        help="Downgrade mkinitcpio + dropbear + cryptsetup + mdadm + lvm2 to the "
-             "version before the last pacman -Syu, then rebuild initramfs. MUTATES.",
+    p = p_fix_sub.add_parser(
+        "static-ip",
+        help="In chroot: replace `ip=dhcp` in /etc/default/grub with a static kernel-cmdline IP derived from the .network file. MUTATES.",
     )
-    p_di.add_argument("host")
-    p_di.add_argument(
-        "--no-passphrase-prompt",
-        action="store_true",
-        help="Skip the early LUKS prompt (use when LUKS is already open from a prior run).",
-    )
+    _add_host(p)
+    _add_passphrase_flag(p)
 
-    p_si = sub.add_parser(
-        "use-static-ip",
-        help="Replace ip=dhcp in /etc/default/grub with a static kernel-cmdline "
-             "network spec (derived from /etc/systemd/network/*.network). MUTATES.",
+    p = p_fix_sub.add_parser(
+        "upgrade",
+        help="In chroot: full `pacman -Syyu` + rebuild initramfs + grub-install on every boot disk. MUTATES.",
     )
-    p_si.add_argument("host")
-    p_si.add_argument(
-        "--no-passphrase-prompt",
-        action="store_true",
-        help="Skip the early LUKS prompt (use when LUKS is already open from a prior run).",
-    )
+    _add_host(p)
+    _add_passphrase_flag(p)
 
-    p_us = sub.add_parser(
-        "upgrade-system",
-        help="Full pacman -Syyu + initramfs rebuild + grub-install on every boot disk "
-             "+ grub.cfg regen, all in one chroot session. Uses --disable-sandbox "
-             "to work around the Hetzner Rescue kernel's missing Landlock. MUTATES.",
+    p = p_fix_sub.add_parser(
+        "expand-fs",
+        help="On the booted system: `lvresize -l +100%%FREE /dev/vg0/root && btrfs filesystem resize max /`. MUTATES.",
     )
-    p_us.add_argument("host")
-    p_us.add_argument(
-        "--no-passphrase-prompt",
-        action="store_true",
-        help="Skip the early LUKS prompt (use when LUKS is already open from a prior run).",
-    )
+    _add_host(p)
 
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
+    pp = not getattr(args, "no_passphrase_prompt", False)
 
+    # Top-level
     if args.cmd == "status":
         return probe.status(args.host)
-    if args.cmd == "connect" and args.target == "rescue":
-        return remote.connect_rescue(args.host, command=args.command or None)
-    if args.cmd == "connect" and args.target == "chroot":
-        return remote.connect_chroot(
-            args.host,
-            ask_passphrase=not args.no_passphrase_prompt,
-            command=args.command or None,
-        )
     if args.cmd == "diagnose":
-        return remote.diagnose(args.host, ask_passphrase=not args.no_passphrase_prompt)
-    if args.cmd == "fix-boot":
-        return remote.fix_boot(args.host, ask_passphrase=not args.no_passphrase_prompt)
-    if args.cmd == "fix-network":
-        return remote.fix_network(args.host, ask_passphrase=not args.no_passphrase_prompt)
-    if args.cmd == "downgrade-kernel":
-        return remote.downgrade_kernel(args.host, ask_passphrase=not args.no_passphrase_prompt)
-    if args.cmd == "forget-passphrase":
+        return remote.diagnose(args.host, ask_passphrase=pp)
+    if args.cmd == "unlock":
+        return remote.unlock(args.host, ask_passphrase=pp)
+    if args.cmd == "forget":
         return remote.forget_passphrase(args.host)
-    if args.cmd == "reinstall-grub":
-        return remote.reinstall_grub(args.host, ask_passphrase=not args.no_passphrase_prompt)
-    if args.cmd == "downgrade-initramfs":
-        return remote.downgrade_initramfs(args.host, ask_passphrase=not args.no_passphrase_prompt)
-    if args.cmd == "use-static-ip":
-        return remote.use_static_ip(args.host, ask_passphrase=not args.no_passphrase_prompt)
-    if args.cmd == "upgrade-system":
-        return remote.upgrade_system(args.host, ask_passphrase=not args.no_passphrase_prompt)
+
+    # connect group
+    if args.cmd == "connect":
+        cmd_list = getattr(args, "command", None) or None
+        if args.target == "rescue":
+            return remote.connect_rescue(args.host, command=cmd_list)
+        if args.target == "chroot":
+            return remote.connect_chroot(args.host, ask_passphrase=pp, command=cmd_list)
+        if args.target == "server":
+            return remote.connect_server(args.host, command=cmd_list)
+
+    # setup group
+    if args.cmd == "setup":
+        if args.target == "image":
+            return remote.install_image(args.host, args.autosetup)
+        if args.target == "dropbear":
+            return remote.setup_dropbear(args.host)
+        if args.target == "grub":
+            return remote.install_grub(args.host, ask_passphrase=pp)
+        if args.target == "encrypt-root":
+            return remote.encrypt_root(args.host)
+
+    # fix group
+    if args.cmd == "fix":
+        if args.target == "boot":
+            return remote.fix_boot(args.host, ask_passphrase=pp)
+        if args.target == "network":
+            return remote.fix_network(args.host, ask_passphrase=pp)
+        if args.target == "grub":
+            return remote.reinstall_grub(args.host, ask_passphrase=pp)
+        if args.target == "kernel":
+            return remote.downgrade_kernel(args.host, ask_passphrase=pp)
+        if args.target == "static-ip":
+            return remote.use_static_ip(args.host, ask_passphrase=pp)
+        if args.target == "upgrade":
+            return remote.upgrade_system(args.host, ask_passphrase=pp)
+        if args.target == "expand-fs":
+            return remote.expand_fs(args.host)
 
     return 2
 
